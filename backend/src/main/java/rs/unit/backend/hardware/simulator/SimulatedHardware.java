@@ -1,5 +1,7 @@
 package rs.unit.backend.hardware.simulator;
 
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Component;
 import rs.unit.backend.hardware.model.HardwareSnapshot;
 import rs.unit.backend.hardware.model.HardwareSnapshot.AcceptorState;
@@ -13,17 +15,24 @@ import rs.unit.backend.hardware.port.HardwareStatusPort;
 @Component
 public class SimulatedHardware implements HardwareStatusPort {
 
-    private final HardwareSnapshot initialState =
-            new HardwareSnapshot(
-                    AcceptorState.READY,
-                    CashboxState.PRESENT,
-                    DoorState.CLOSED,
-                    LockState.LOCKED,
-                    ExtensionBoardState.ONLINE,
-                    PrinterState.READY);
+    private final AtomicReference<HardwareSnapshot> state =
+            new AtomicReference<>(
+                    new HardwareSnapshot(
+                            AcceptorState.READY,
+                            CashboxState.PRESENT,
+                            DoorState.CLOSED,
+                            LockState.LOCKED,
+                            ExtensionBoardState.ONLINE,
+                            PrinterState.READY));
 
     @Override
     public HardwareSnapshot snapshot() {
-        return initialState;
+        return state.get();
+    }
+
+    public HardwareSnapshot replaceState(HardwareSnapshot newState) {
+        Objects.requireNonNull(newState, "newState");
+        state.set(newState);
+        return newState;
     }
 }
