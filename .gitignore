@@ -1,0 +1,22 @@
+# Java / Maven
+**/target/
+
+# Angular / Node
+**/node_modules/
+**/dist/
+**/.angular/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Logs / OS
+*.log
+Thumbs.db
+.DS_Store
