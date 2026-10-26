@@ -2,6 +2,8 @@ package rs.unit.backend.machine.application;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import rs.unit.backend.diagnostics.domain.MachineDiagnosticsPolicy;
+import rs.unit.backend.diagnostics.model.MachineDiagnostics;
 import rs.unit.backend.hardware.model.HardwareSnapshot;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
 import rs.unit.backend.machine.domain.MachineReadinessPolicy;
@@ -34,6 +36,7 @@ public class MachineStatusService {
                                                 "Machine configuration is missing."));
 
         HardwareSnapshot hardware = hardwareStatusPort.snapshot();
+        MachineDiagnostics diagnostics = MachineDiagnosticsPolicy.evaluate(hardware);
 
         return new MachineStatus(
                 configuration.getMachineCode(),
@@ -45,6 +48,9 @@ public class MachineStatusService {
                 MachineReadinessPolicy.isSecure(hardware),
                 MachineReadinessPolicy.isDepositHardwareReady(hardware),
                 MachineReadinessPolicy.isPrintingAvailable(hardware),
-                hardware);
+                hardware,
+                diagnostics.indicator(),
+                diagnostics.alertCount(),
+                diagnostics.alerts());
     }
 }

@@ -55,6 +55,9 @@ class MachineStatusIntegrationTest {
                 .andExpect(jsonPath("$.hardware.door").value("CLOSED"))
                 .andExpect(jsonPath("$.hardware.lock").value("LOCKED"))
                 .andExpect(jsonPath("$.hardware.extensionBoard").value("ONLINE"))
-                .andExpect(jsonPath("$.hardware.printer").value("READY"));
+                .andExpect(jsonPath("$.hardware.printer").value("READY"))
+                .andExpect(jsonPath("$.indicator").value("GREEN"))
+                .andExpect(jsonPath("$.alertCount").value(0))
+                .andExpect(jsonPath("$.alerts").isEmpty());
     }
 }

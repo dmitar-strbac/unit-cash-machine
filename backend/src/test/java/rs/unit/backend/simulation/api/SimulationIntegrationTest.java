@@ -56,7 +56,27 @@ class SimulationIntegrationTest {
         mockMvc.perform(get("/api/machine/status"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.printingAvailable").value(false))
-                .andExpect(jsonPath("$.depositHardwareReady").value(true));
+                .andExpect(jsonPath("$.depositHardwareReady").value(true))
+                .andExpect(jsonPath("$.indicator").value("AMBER"))
+                .andExpect(jsonPath("$.alertCount").value(1))
+                .andExpect(jsonPath("$.alerts[0].code").value("PRINTER_OFFLINE"))
+                .andExpect(jsonPath("$.alerts[0].source").value("PRINTER"))
+                .andExpect(jsonPath("$.alerts[0].severity").value("WARNING"))
+                .andExpect(jsonPath("$.alerts[0].message").value("Not operational"))
+                .andExpect(jsonPath("$.alerts[0].blocksDeposit").value(false));
+
+        mockMvc.perform(
+                        put("/api/simulation/hardware")
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(stateJson("CLOSED", "LOCKED", "READY")))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/machine/status"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.printingAvailable").value(true))
+                .andExpect(jsonPath("$.indicator").value("GREEN"))
+                .andExpect(jsonPath("$.alertCount").value(0))
+                .andExpect(jsonPath("$.alerts").isEmpty());
     }
 
     @Test

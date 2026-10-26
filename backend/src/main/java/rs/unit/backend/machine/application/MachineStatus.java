@@ -1,5 +1,8 @@
 package rs.unit.backend.machine.application;
 
+import java.util.List;
+import rs.unit.backend.diagnostics.model.MachineAlert;
+import rs.unit.backend.diagnostics.model.MachineDiagnostics.Indicator;
 import rs.unit.backend.hardware.model.HardwareSnapshot;
 
 public record MachineStatus(
@@ -12,4 +15,12 @@ public record MachineStatus(
         boolean secure,
         boolean depositHardwareReady,
         boolean printingAvailable,
-        HardwareSnapshot hardware) {}
+        HardwareSnapshot hardware,
+        Indicator indicator,
+        int alertCount,
+        List<MachineAlert> alerts) {
+
+    public MachineStatus {
+        alerts = List.copyOf(alerts);
+    }
+}
