@@ -1,0 +1,22 @@
+name: unit-cash-machine
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: unit_cash_machine
+      POSTGRES_USER: unit_app
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unit_app -d unit_cash_machine"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  postgres_data:

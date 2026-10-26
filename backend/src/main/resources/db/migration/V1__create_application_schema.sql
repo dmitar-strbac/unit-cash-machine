@@ -1,0 +1,1 @@
+CREATE SCHEMA cash_machine;
