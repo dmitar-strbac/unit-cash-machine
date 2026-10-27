@@ -15,6 +15,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
+import rs.unit.backend.deposit.infrastructure.DepositLogoutHandler;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
 @Configuration(proxyBeanMethods = false)
@@ -42,7 +43,8 @@ public class SecurityConfiguration {
             SecurityContextRepository contextRepository,
             CsrfTokenRepository csrfRepository,
             Clock clock,
-            UserAccountRepository userRepository)
+            UserAccountRepository userRepository,
+            DepositLogoutHandler depositLogoutHandler)
             throws Exception {
 
         http.formLogin(AbstractHttpConfigurer::disable)
@@ -74,6 +76,11 @@ public class SecurityConfiguration {
                                         .authenticated()
                                         .requestMatchers("/api/simulation/**")
                                         .hasRole("MAINTENANCE")
+                                        .requestMatchers(HttpMethod.GET, "/api/deposits/current")
+                                        .hasRole("CASHIER")
+                                        .requestMatchers(
+                                                HttpMethod.POST, "/api/deposits/current/banknotes")
+                                        .hasRole("CASHIER")
                                         .anyRequest()
                                         .denyAll())
                 .exceptionHandling(
@@ -104,6 +111,7 @@ public class SecurityConfiguration {
                 .logout(
                         logout ->
                                 logout.logoutUrl("/api/auth/logout")
+                                        .addLogoutHandler(depositLogoutHandler)
                                         .invalidateHttpSession(true)
                                         .clearAuthentication(true)
                                         .deleteCookies("UNIT_SESSION")

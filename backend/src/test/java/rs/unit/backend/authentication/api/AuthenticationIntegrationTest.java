@@ -1,5 +1,6 @@
 package rs.unit.backend.authentication.api;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
@@ -30,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 import rs.unit.backend.authentication.application.LoginAttemptLimiter;
 import rs.unit.backend.authentication.application.PinService;
+import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository;
 import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
@@ -41,6 +43,7 @@ class AuthenticationIntegrationTest {
 
     @Autowired private WebApplicationContext applicationContext;
     @Autowired private UserAccountRepository repository;
+    @Autowired private DepositRepository depositRepository;
     @Autowired private PinService pinService;
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private EntityManager entityManager;
@@ -301,15 +304,337 @@ class AuthenticationIntegrationTest {
 
     @Test
     void deletingAccountInvalidatesSessionOnNextRequest() throws Exception {
-        MockHttpSession session = loginCashier();
+        UUID managerId = save(UserRole.MANAGEMENT, "5678", true);
+
+        var result =
+                mockMvc.perform(
+                                post("/api/auth/login")
+                                        .with(csrf())
+                                        .contentType(MediaType.APPLICATION_JSON)
+                                        .content(loginBody(managerId, "MANAGEMENT", "5678")))
+                        .andExpect(status().isOk())
+                        .andReturn();
+
+        MockHttpSession session = (MockHttpSession) result.getRequest().getSession(false);
 
         entityManager.flush();
-        jdbcTemplate.update("DELETE FROM cash_machine.user_account WHERE id = ?", cashierId);
+
+        jdbcTemplate.update("DELETE FROM cash_machine.user_account WHERE id = ?", managerId);
+
         entityManager.clear();
 
         mockMvc.perform(get("/api/auth/me").session(session)).andExpect(status().isUnauthorized());
 
         assertTrue(session.isInvalid());
+    }
+
+    @Test
+    void cashierLoginStartsAnEmptyDeposit() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        mockMvc.perform(get("/api/deposits/current").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.currency").value("EUR"))
+                .andExpect(jsonPath("$.totalCents").value(0))
+                .andExpect(jsonPath("$.banknoteCount").value(0))
+                .andExpect(jsonPath("$.acceptingEnabled").value(true));
+    }
+
+    @Test
+    void acceptedBanknotesArePersistedImmediately() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(UUID.randomUUID(), "EUR", 20)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("ACCEPTED"))
+                .andExpect(jsonPath("$.deposit.totalCents").value(2000));
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(UUID.randomUUID(), "EUR", 50)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.deposit.totalCents").value(7000))
+                .andExpect(jsonPath("$.deposit.banknoteCount").value(2));
+
+        Long count =
+                jdbcTemplate.queryForObject(
+                        """
+                        SELECT COUNT(*)
+                        FROM cash_machine.deposit_banknote_operation operation
+                        JOIN cash_machine.deposit deposit
+                            ON deposit.id = operation.deposit_id
+                        WHERE deposit.user_id = ?
+                            AND operation.outcome = 'ACCEPTED'
+                        """,
+                        Long.class,
+                        cashierId);
+
+        assertEquals(2L, count);
+    }
+
+    @Test
+    void otherCurrencyDoesNotIncreaseDeposit() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(UUID.randomUUID(), "USD", 20)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("CURRENCY_REJECTED"))
+                .andExpect(jsonPath("$.deposit.totalCents").value(0))
+                .andExpect(jsonPath("$.deposit.banknoteCount").value(0));
+    }
+
+    @Test
+    void unsupportedEuroDenominationIsRejected() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(UUID.randomUUID(), "EUR", 25)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("DENOMINATION_REJECTED"))
+                .andExpect(jsonPath("$.deposit.totalCents").value(0));
+    }
+
+    @Test
+    void repeatingOperationDoesNotCountBanknoteTwice() throws Exception {
+        MockHttpSession session = loginCashier();
+        UUID operationId = UUID.randomUUID();
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mockMvc.perform(
+                            post("/api/deposits/current/banknotes")
+                                    .session(session)
+                                    .with(csrf())
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(banknoteBody(operationId, "EUR", 20)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.replayed").value(attempt == 1))
+                    .andExpect(jsonPath("$.deposit.totalCents").value(2000))
+                    .andExpect(jsonPath("$.deposit.banknoteCount").value(1));
+        }
+    }
+
+    @Test
+    void operationIdentifierCannotBeReusedWithDifferentContents() throws Exception {
+        MockHttpSession session = loginCashier();
+        UUID operationId = UUID.randomUUID();
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(operationId, "EUR", 20)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(operationId, "EUR", 50)))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(get("/api/deposits/current").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCents").value(2000));
+    }
+
+    @Test
+    void anotherBrowserCannotStartASecondDeposit() throws Exception {
+        loginCashier();
+
+        mockMvc.perform(
+                        post("/api/auth/login")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(loginBody(cashierId, "CASHIER", "1234")))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void banknoteInsertionRequiresCsrf() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(UUID.randomUUID(), "EUR", 20)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void logoutCompletesDepositAndPreservesAcceptedMoney() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(UUID.randomUUID(), "EUR", 100)))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/auth/logout").session(session).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        String depositStatus =
+                jdbcTemplate.queryForObject(
+                        """
+                        SELECT status
+                        FROM cash_machine.deposit
+                        WHERE user_id = ?
+                        """,
+                        String.class,
+                        cashierId);
+
+        assertEquals("COMPLETED", depositStatus);
+
+        Long totalCents =
+                jdbcTemplate.queryForObject(
+                        """
+                        SELECT SUM(operation.denomination::bigint * 100)
+                        FROM cash_machine.deposit_banknote_operation operation
+                        JOIN cash_machine.deposit deposit
+                            ON deposit.id = operation.deposit_id
+                        WHERE deposit.user_id = ?
+                            AND operation.outcome = 'ACCEPTED'
+                        """,
+                        Long.class,
+                        cashierId);
+
+        assertEquals(10000L, totalCents);
+    }
+
+    @Test
+    void expiredDepositDoesNotPreventNextCashierLogin() throws Exception {
+        loginCashier();
+
+        when(clock.instant()).thenReturn(now.plusSeconds(900));
+
+        mockMvc.perform(
+                        post("/api/auth/login")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(loginBody(cashierId, "CASHIER", "1234")))
+                .andExpect(status().isOk());
+
+        Long expiredCount =
+                jdbcTemplate.queryForObject(
+                        """
+                        SELECT COUNT(*)
+                        FROM cash_machine.deposit
+                        WHERE user_id = ?
+                            AND status = 'EXPIRED'
+                        """,
+                        Long.class,
+                        cashierId);
+
+        assertEquals(1L, expiredCount);
+    }
+
+    @Test
+    void expiredSessionCannotInsertBanknotes() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        when(clock.instant()).thenReturn(now.plusSeconds(900));
+
+        mockMvc.perform(
+                        post("/api/deposits/current/banknotes")
+                                .session(session)
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(banknoteBody(UUID.randomUUID(), "EUR", 20)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    private String banknoteBody(UUID operationId, String currency, int denomination) {
+        return """
+            {
+                "operationId": "%s",
+                "currency": "%s",
+                "denomination": %d
+            }
+            """
+                .formatted(operationId, currency, denomination);
+    }
+
+    @Test
+    void repositoryReadsCompletedDepositWithFinishTime() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        UUID loginId =
+                jdbcTemplate.queryForObject(
+                        """
+                        SELECT login_id
+                        FROM cash_machine.deposit
+                        WHERE user_id = ?
+                            AND status = 'ACTIVE'
+                        """,
+                        UUID.class,
+                        cashierId);
+
+        mockMvc.perform(post("/api/auth/logout").session(session).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        var deposit = depositRepository.findByLoginId(loginId).orElseThrow();
+
+        assertEquals("COMPLETED", deposit.status());
+        assertEquals(now, deposit.finishedAt());
+    }
+
+    @Test
+    void nextLoginClosesDepositFromPreviousApplicationRun() throws Exception {
+        loginCashier();
+
+        jdbcTemplate.update(
+                """
+                UPDATE cash_machine.deposit
+                SET runtime_id = ?
+                WHERE user_id = ?
+                    AND status = 'ACTIVE'
+                """,
+                UUID.randomUUID(),
+                cashierId);
+
+        mockMvc.perform(
+                        post("/api/auth/login")
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(loginBody(cashierId, "CASHIER", "1234")))
+                .andExpect(status().isOk());
+
+        Long interruptedCount =
+                jdbcTemplate.queryForObject(
+                        """
+                        SELECT COUNT(*)
+                        FROM cash_machine.deposit
+                        WHERE user_id = ?
+                            AND status = 'INTERRUPTED'
+                            AND finished_at IS NOT NULL
+                        """,
+                        Long.class,
+                        cashierId);
+
+        assertEquals(1L, interruptedCount);
     }
 
     private MockHttpSession loginCashier() throws Exception {
@@ -329,6 +654,8 @@ class AuthenticationIntegrationTest {
         UUID id = UUID.randomUUID();
 
         repository.save(new UserAccount(id, "Test " + role, role, pinService.encode(pin), active));
+
+        entityManager.flush();
 
         return id;
     }
