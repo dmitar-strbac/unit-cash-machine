@@ -4,13 +4,13 @@
 
 ### Cash deposit machine simulator
 
-A Spring Boot backend that models hardware states, operational readiness  
-and fault diagnostics for a cash deposit machine.
+A local cash deposit machine simulator built with Spring Boot and Angular,
+featuring a touchscreen-inspired interface, simulated hardware and live diagnostics.
 
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1.2-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
-![Angular planned](https://img.shields.io/badge/Angular-Planned-DD0031?style=for-the-badge&logo=angular&logoColor=white)
+![Angular](https://img.shields.io/badge/Angular-21-DD0031?style=for-the-badge&logo=angular&logoColor=white)
 
 **Simulated hardware · Explicit domain rules · Testable fault scenarios**
 
@@ -32,21 +32,17 @@ A cash deposit machine needs to do more than count banknotes. It must know wheth
 
 The project is developed incrementally, starting with hardware simulation before introducing authentication, deposits, cash collection and reporting.
 
-> **Current stage:** backend foundation, hardware simulation and diagnostics.
-> No physical hardware is connected, and money processing is not implemented yet.
+## ✨ Features
 
-## ✨ Implemented capabilities
-
-| Capability | What it provides |
-| :--- | :--- |
-| 🏧 Machine configuration | Persisted identity, location, currency and time zone |
-| 🔌 Hardware simulation | Independent states for six hardware components |
-| 🔒 Security status | Derived from door and lock states |
-| ✅ Deposit readiness | Explicit rules for whether hardware can accept a new deposit |
-| 🚦 Diagnostics | Structured alerts with severity, source and operational impact |
-| 🧪 Fault injection | API for replacing the hardware snapshot during simulation |
-| 🗄️ Database migrations | Versioned schema changes managed by Flyway |
-| 🛠️ Quality tooling | Automated formatting checks, tests and coverage reports |
+| Area | Description | Status |
+| :--- | :--- | :--- |
+| 🖥️ Machine interface | Touchscreen-inspired navigation, machine information and live diagnostics | Available |
+| 🔌 Hardware simulation | Six modeled components, readiness rules and API-based fault injection | Available |
+| 🚦 Diagnostics | Component alerts, severity indicators and connection-loss feedback | Available |
+| 🔐 Authentication | Profile selection, PIN login and role-based access | Planned |
+| 💶 Deposits | EUR banknote acceptance and persistent deposit records | Planned |
+| 🚚 Cash collection | CIT workflow and cashbox replacement | Planned |
+| 🧾 Reporting | Daily, per-user and device totals with simulated printing | Planned |
 
 ### Six components, one consistent snapshot
 
@@ -71,55 +67,44 @@ The project is developed incrementally, starting with hardware simulation before
 
 ## 🏗️ Architecture
 
-The backend is organized by feature, with separate API, application, domain and infrastructure responsibilities where needed.
+The Spring Boot backend is organized by feature, with separate API,
+application, domain and infrastructure responsibilities where needed.
+The Angular frontend provides the machine interface.
 
 ```mermaid
 flowchart TD
-    Client["API client / planned Angular UI"]
-
-    subgraph Backend["Spring Boot backend"]
-        StatusAPI["Machine status API"]
-        Service["Machine status service"]
-        Policies["Readiness and diagnostics policies"]
-        Repository["Configuration repository"]
-        Port["HardwareStatusPort"]
-        Simulator["In-memory hardware simulator"]
-        SimulationAPI["Simulation API — optional profile"]
-    end
-
+    UI["Angular machine interface"]
+    API["Spring Boot REST API"]
+    Domain["Application services and domain rules"]
     Database[("PostgreSQL")]
+    Hardware["Hardware ports"]
+    Simulator["In-memory hardware simulator"]
+    Controls["Simulation API client"]
 
-    Client --> StatusAPI
-    StatusAPI --> Service
-    Service --> Policies
-    Service --> Repository
-    Repository --> Database
-    Service --> Port
-    Port --> Simulator
-    Client --> SimulationAPI
-    SimulationAPI --> Simulator
+    UI --> API
+    API --> Domain
+    Domain --> Database
+    Domain --> Hardware
+    Hardware --> Simulator
+    Controls -->|"simulation profile"| API
 ```
 
-| Package | Responsibility |
-| :--- | :--- |
-| `machine` | Machine status, readiness rules and configuration persistence |
-| `hardware.model` | Immutable snapshots and component state enums |
-| `hardware.port` | Interface for reading hardware status |
-| `hardware.simulator` | In-memory hardware implementation |
-| `diagnostics` | Alert generation and indicator calculation |
-| `simulation.api` | Validated simulation controls |
-
-**Persistence boundary:** machine configuration is stored in PostgreSQL. Simulated hardware state lives in memory and resets to healthy defaults when the backend restarts. Alerts are calculated from the current snapshot; alert history is not yet persisted.
+Persistent application data is stored in PostgreSQL, with schema changes
+managed by Flyway. Simulated hardware state is held in memory and resets
+when the backend restarts.
 
 ## 🚦 Readiness and diagnostics
 
-The system answers three separate questions:
+<details>
+<summary><strong>🔎 Hardware states and readiness rules</strong></summary>
 
 | Question | Rule |
 | :--- | :--- |
 | **Is the machine secure?** | Door is closed and lock is locked |
 | **Is deposit hardware ready?** | Machine is secure, acceptor is ready, cashbox is present and extension board is online |
 | **Is printing available?** | Printer is ready |
+
+</details>
 
 Indicator color summarizes the current alerts:
 
@@ -145,25 +130,28 @@ flowchart TD
 | Area | Technologies |
 | :--- | :--- |
 | Backend | Java 21, Spring Boot 4.1.2, Spring MVC |
+| Frontend | Angular 21, TypeScript, SCSS, standalone components |
 | Validation | Jakarta Bean Validation, Problem Details responses |
 | Persistence | Spring Data JPA, Hibernate, PostgreSQL 17 |
 | Migrations | Flyway |
 | Testing | JUnit, Mockito, Spring Boot Test, MockMvc |
-| Formatting | Spotless, google-java-format with AOSP style |
+| Frontend testing | Vitest, Angular TestBed |
+| Formatting | Spotless, google-java-format with AOSP style, Prettier |
 | Coverage | JaCoCo |
-| Build | Maven Wrapper |
+| Build | Maven Wrapper, Angular CLI |
 | Local database | Docker Compose |
-| Planned frontend | Angular |
 
 ## 🚀 Quick start
 
 ### 1. Prerequisites
 
 - **JDK 21**
+- **Node.js 22.19.0**
+- **npm 11.6.2**
 - **Docker Desktop with Compose** for the local database setup
 - **Git**
 
-Maven is supplied through the wrapper. Angular and Node.js are not required to run the current backend.
+Maven is supplied through the wrapper, and Angular CLI is installed with the frontend dependencies. Node.js is only required for the frontend.
 
 ### 2. Start the database
 
@@ -189,8 +177,6 @@ The default backend connection expects:
 | Database | `unit_cash_machine` |
 | Username | `unit_app` |
 | Schema | `cash_machine`, created by Flyway |
-
-> A backend-only download requires the root Compose configuration or an independently configured PostgreSQL instance.
 
 ### 3. Configure the backend
 
@@ -239,6 +225,21 @@ Both modes use simulated hardware. The profile controls whether its state can be
 Invoke-RestMethod 'http://localhost:8080/actuator/health'
 ```
 
+### 6. Run the frontend
+
+Keep the backend running. Open another terminal in the repository root:
+
+```powershell
+cd frontend
+npx --yes npm@11.6.2 ci
+npm start
+```
+
+Open **http://127.0.0.1:4200**.
+
+The Angular development server proxies `/api/**` requests to
+`http://127.0.0.1:8080`. No database credentials are stored in the frontend.
+
 ## 🔌 API demo
 
 | Method | Endpoint | Purpose |
@@ -247,7 +248,8 @@ Invoke-RestMethod 'http://localhost:8080/actuator/health'
 | `GET` | `/api/machine/status` | Configuration, hardware, readiness and alerts |
 | `PUT` | `/api/simulation/hardware` | Full hardware state replacement; requires `simulation` profile |
 
-### Scenario: printer goes offline
+<details>
+<summary><strong>🧪 Try a fault scenario: printer offline</strong></summary>
 
 Send a complete hardware snapshot:
 
@@ -300,9 +302,6 @@ Relevant response fields:
 
 Repeat the request with `printer = 'READY'` to restore printing and clear the warning.
 
-<details>
-<summary><strong>Validation and simulation behavior</strong></summary>
-
 - All six component fields are required.
 - Missing fields, invalid enum values and malformed JSON are rejected.
 - Invalid requests leave the hardware state unchanged.
@@ -329,50 +328,41 @@ From `backend`, with PostgreSQL running and `DB_PASSWORD` configured:
 Start-Process .\target\site\jacoco\index.html
 ```
 
+From `frontend`:
+
+```powershell
+npm run format:check
+npm run build
+npm test -- --watch=false
+```
+
+To apply formatting:
+
+```powershell
+npm run format
+```
+
 ### What the tests exercise
 
-| Area | Scenarios |
-| :--- | :--- |
-| Readiness | Secure defaults, unavailable components, busy acceptor and printer failures |
-| Diagnostics | Component faults, severity priority, multiple alerts and recovery |
-| Simulator | Snapshot replacement, previous snapshot stability and null rejection |
-| Application service | Missing machine configuration |
-| Status API | Stored configuration, initial hardware and computed status |
-| Simulation API | State changes, recovery, repeated requests and invalid input |
-| Profile boundaries | Simulation controller absent without its profile |
+Tests cover domain rules, application behavior, API validation and frontend
+status feedback. New functionality is developed alongside tests for its
+expected behavior and failure scenarios.
 
-Integration tests currently use the configured PostgreSQL database and apply Flyway migrations. Use a local development or dedicated test database.
+Backend integration tests use the configured PostgreSQL database and apply
+Flyway migrations. Use a local development or dedicated test database.
+Frontend unit tests use mocked services and do not require a running backend.
+
+Backend coverage reports are generated with JaCoCo.
 
 JaCoCo excludes only the application bootstrap class from its report. A coverage threshold is not yet enforced by the build.
 
 ## 🗺️ Roadmap
 
-### Foundation — implemented
-
-- [x] PostgreSQL configuration and Flyway migrations
-- [x] Persisted machine identity and configuration
-- [x] Hardware abstraction and in-memory simulator
-- [x] Machine status and readiness rules
-- [x] Simulation API with request validation
-- [x] Component alerts and status indicators
-- [x] Unit and integration tests
-- [x] Formatting checks and coverage reporting
-
-### User workflows — planned
-
-- [ ] Angular machine interface and simulation controls
-- [ ] User profiles, PIN authentication and role permissions
-- [ ] EUR banknote acceptance and durable deposit records
-- [ ] CIT cashbox replacement workflow
-- [ ] Daily, per-user and device totals
-- [ ] Simulated receipt printing and printer failure handling
-
-### Reliability — planned
-
-- [ ] Audit history
-- [ ] Interrupted-operation recovery
-- [ ] Isolated integration test databases
-- [ ] Continuous integration
+- [ ] Complete authentication and role-specific workflows
+- [ ] Implement deposits, cash collection and reporting
+- [ ] Add frontend controls for hardware fault simulation
+- [ ] Introduce audit history and interrupted-operation recovery
+- [ ] Isolate integration test databases and add continuous integration
 
 <details>
 <summary><strong>Observed requirements guiding future workflows</strong></summary>
