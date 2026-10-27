@@ -1,0 +1,42 @@
+<div class="simulator">
+  <div class="machine-screen">
+    <header class="machine-header">
+      @if (!isHome()) {
+        <a class="back-link" routerLink="/">
+          <span aria-hidden="true">‹</span>
+          BACK
+        </a>
+      }
+
+      <a class="brand" routerLink="/" aria-label="Unit home">
+        UNIT<span class="brand-mark" aria-hidden="true">◔</span>
+      </a>
+    </header>
+
+    <main class="machine-content">
+      <router-outlet />
+    </main>
+
+    <footer class="machine-footer">
+      <a class="info-link" routerLink="/info" aria-label="Machine information">
+        <span aria-hidden="true">i</span>
+      </a>
+
+      <span class="language" aria-label="Interface language: English">EN</span>
+
+      <a class="status-link" routerLink="/diagnostics">
+        <span class="status-text" aria-live="polite">{{ statusLabel() }}</span>
+        <span
+          class="status-dot"
+          [class.green]="indicator() === 'green'"
+          [class.amber]="indicator() === 'amber'"
+          [class.red]="indicator() === 'red'"
+          [class.unknown]="indicator() === 'unknown'"
+          aria-hidden="true"
+        ></span>
+      </a>
+    </footer>
+  </div>
+
+  <p class="simulator-caption">UNIT CASH MACHINE · LOCAL SIMULATOR</p>
+</div>
