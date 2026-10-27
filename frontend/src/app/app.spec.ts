@@ -1,7 +1,9 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { Subject } from 'rxjs';
+import { of, Subject } from 'rxjs';
 import { App } from './app';
+import { AuthService } from './core/auth/auth.service';
 import { MachineStatus } from './core/machine/machine-status';
 import { MachineConnection, MachineStatusService } from './core/machine/machine-status.service';
 
@@ -40,7 +42,13 @@ describe('App', () => {
         provideRouter([]),
         {
           provide: MachineStatusService,
-          useValue: { connection$: connection.asObservable() },
+          AuthService,
+          useValue: {
+            connection$: connection.asObservable(),
+            user: signal(null),
+            notice: signal(''),
+            refresh: () => of(null),
+          },
         },
       ],
     }).compileComponents();

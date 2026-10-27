@@ -1,6 +1,9 @@
 package rs.unit.backend.simulation.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -35,7 +38,10 @@ class SimulationIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(applicationContext).build();
+        mockMvc =
+                MockMvcBuilders.webAppContextSetup(applicationContext)
+                        .apply(springSecurity())
+                        .build();
         originalState = simulatedHardware.snapshot();
     }
 
@@ -48,6 +54,8 @@ class SimulationIntegrationTest {
     void offlinePrinterDisablesPrintingButNotDeposit() throws Exception {
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(stateJson("CLOSED", "LOCKED", "OFFLINE")))
                 .andExpect(status().isOk())
@@ -67,6 +75,8 @@ class SimulationIntegrationTest {
 
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(stateJson("CLOSED", "LOCKED", "READY")))
                 .andExpect(status().isOk());
@@ -83,6 +93,8 @@ class SimulationIntegrationTest {
     void openingDoorBlocksDepositAndRestoringStateAllowsItAgain() throws Exception {
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(stateJson("OPEN", "UNLOCKED", "READY")))
                 .andExpect(status().isOk());
@@ -94,6 +106,8 @@ class SimulationIntegrationTest {
 
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(stateJson("CLOSED", "LOCKED", "READY")))
                 .andExpect(status().isOk());
@@ -110,6 +124,8 @@ class SimulationIntegrationTest {
 
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                 .andExpect(status().isOk());
@@ -118,6 +134,8 @@ class SimulationIntegrationTest {
 
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(body))
                 .andExpect(status().isOk());
@@ -137,6 +155,8 @@ class SimulationIntegrationTest {
 
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(invalidBody))
                 .andExpect(status().isBadRequest())
@@ -150,6 +170,8 @@ class SimulationIntegrationTest {
     void unknownEnumValueIsRejectedWithoutChangingState() throws Exception {
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(stateJson("CLOSED", "LOCKED", "BROKEN_VALUE")))
                 .andExpect(status().isBadRequest())
@@ -162,6 +184,8 @@ class SimulationIntegrationTest {
     void malformedJsonIsRejectedWithoutChangingState() throws Exception {
         mockMvc.perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{"))
                 .andExpect(status().isBadRequest())

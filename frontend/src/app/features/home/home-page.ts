@@ -7,7 +7,7 @@ import { RouterLink } from '@angular/router';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="home-grid" aria-label="Main menu">
-      <button class="machine-button home-tile" disabled>
+      <a class="machine-button home-tile" routerLink="/login/cashier">
         <svg viewBox="0 0 100 80" aria-hidden="true">
           <circle cx="50" cy="22" r="16" />
           <circle cx="17" cy="29" r="10" />
@@ -17,8 +17,7 @@ import { RouterLink } from '@angular/router';
           <path d="M79 62c0-6-3-12-9-18a15 15 0 0 1 28 7v11Z" />
         </svg>
         <span>DEPOSIT</span>
-        <small>Login will be available in a later update</small>
-      </button>
+      </a>
 
       <a class="machine-button home-tile" routerLink="/settings">
         <svg viewBox="0 0 100 100" aria-hidden="true">

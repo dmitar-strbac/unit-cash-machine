@@ -1,6 +1,9 @@
 package rs.unit.backend.simulation.api;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -23,9 +26,12 @@ class SimulationDisabledIntegrationTest {
         assertTrue(applicationContext.getBeansOfType(SimulationController.class).isEmpty());
 
         MockMvcBuilders.webAppContextSetup(applicationContext)
+                .apply(springSecurity())
                 .build()
                 .perform(
                         put("/api/simulation/hardware")
+                                .with(user("test-maintenance").roles("MAINTENANCE"))
+                                .with(csrf())
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content("{}"))
                 .andExpect(status().isNotFound());

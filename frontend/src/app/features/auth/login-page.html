@@ -1,0 +1,85 @@
+@if (showPin()) {
+  <form class="pin-form" (submit)="submit($event)">
+    <fieldset class="pin-layout" [disabled]="busy()">
+      <legend class="visually-hidden">PIN login</legend>
+
+      <div class="keypad" aria-label="Numeric keypad">
+        @for (digit of digits; track digit) {
+          <button type="button" class="machine-button digit" (click)="appendDigit(digit)">
+            {{ digit }}
+          </button>
+        }
+
+        <button
+          type="button"
+          class="machine-button clear-button"
+          aria-label="Clear PIN"
+          (click)="clearPin()"
+        >
+          C
+        </button>
+
+        <button type="button" class="machine-button digit" (click)="appendDigit('0')">0</button>
+
+        <button
+          type="button"
+          class="machine-button digit"
+          aria-label="Delete last digit"
+          (click)="removeDigit()"
+        >
+          ‹
+        </button>
+      </div>
+
+      <div class="pin-panel">
+        <div class="pin-heading">
+          <label for="pin">Enter PIN</label>
+          <span class="selected-name">
+            {{ isCit ? 'CIT' : selectedUser()?.displayName }}
+          </span>
+        </div>
+
+        <input
+          id="pin"
+          class="pin-input"
+          type="password"
+          inputmode="numeric"
+          autocomplete="off"
+          maxlength="12"
+          pattern="[0-9]{4,12}"
+          [value]="pin()"
+          [attr.aria-invalid]="error() ? 'true' : null"
+          aria-describedby="login-error"
+          (input)="updatePin($event)"
+        />
+
+        <p id="login-error" class="login-error" role="alert">{{ error() }}</p>
+
+        <button type="submit" class="machine-button login-button" [disabled]="!canSubmit()">
+          {{ busy() ? 'SIGNING IN…' : 'LOGIN' }}
+        </button>
+      </div>
+    </fieldset>
+  </form>
+} @else {
+  <section aria-label="User selection">
+    <h1>{{ roleLabel[role] }}</h1>
+
+    @if (loading()) {
+      <p class="message" role="status">Loading users…</p>
+    } @else if (loadError()) {
+      <p class="message" role="alert">{{ loadError() }}</p>
+      <button class="machine-button retry-button" (click)="loadUsers()">TRY AGAIN</button>
+    } @else if (users().length === 0) {
+      <p class="message">No active users available.</p>
+    } @else {
+      <div class="user-grid">
+        @for (user of users(); track user.id) {
+          <button class="machine-button user-button" (click)="selectUser(user)">
+            {{ user.displayName }}
+          </button>
+        }
+      </div>
+    }
+  </section>
+}

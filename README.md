@@ -15,10 +15,10 @@ featuring a touchscreen-inspired interface, simulated hardware and live diagnost
 **Simulated hardware · Explicit domain rules · Testable fault scenarios**
 
 [Overview](#-overview) ·
-[Architecture](#-architecture) ·
+[Architecture](#architecture) ·
 [Quick start](#-quick-start) ·
 [API demo](#-api-demo) ·
-[Roadmap](#-roadmap)
+[Roadmap](#roadmap)
 
 </div>
 
@@ -30,7 +30,7 @@ A cash deposit machine needs to do more than count banknotes. It must know wheth
 
 **Unit Cash Machine** is a local simulator inspired by observed workflows on a physical cash deposit machine. The current backend models six hardware components and exposes a consistent view of machine readiness and diagnostics.
 
-The project is developed incrementally, starting with hardware simulation before introducing authentication, deposits, cash collection and reporting.
+The project is developed incrementally. Hardware simulation, diagnostics and PIN-based authentication are implemented; deposits, cash collection and reporting are planned.
 
 ## ✨ Features
 
@@ -39,7 +39,7 @@ The project is developed incrementally, starting with hardware simulation before
 | 🖥️ Machine interface | Touchscreen-inspired navigation, machine information and live diagnostics | Available |
 | 🔌 Hardware simulation | Six modeled components, readiness rules and API-based fault injection | Available |
 | 🚦 Diagnostics | Component alerts, severity indicators and connection-loss feedback | Available |
-| 🔐 Authentication | Profile selection, PIN login and role-based access | Planned |
+| 🔐 Authentication | Profile selection, PIN login and role-based access | Available |
 | 💶 Deposits | EUR banknote acceptance and persistent deposit records | Planned |
 | 🚚 Cash collection | CIT workflow and cashbox replacement | Planned |
 | 🧾 Reporting | Daily, per-user and device totals with simulated printing | Planned |
@@ -63,8 +63,10 @@ The project is developed incrementally, starting with hardware simulation before
 - **Atomic state replacement.** The simulator replaces the complete snapshot without exposing a partially updated state.
 - **Controlled simulation API.** State-changing endpoints require the `simulation` profile.
 - **Versioned database schema.** Flyway applies migrations; Hibernate validates the resulting schema.
-- **Behavior-focused tests.** Tests cover faults, recovery, invalid requests and endpoint availability.
+- **Behavior-focused tests.** Tests cover faults, recovery, invalid requests and endpoint availability.  
+- **Controlled simulation API.** State-changing simulation endpoints require the `simulation` profile, an authenticated `MAINTENANCE` user and a valid CSRF token.
 
+<a id="architecture"></a>
 ## 🏗️ Architecture
 
 The Spring Boot backend is organized by feature, with separate API,
@@ -134,6 +136,7 @@ flowchart TD
 | Validation | Jakarta Bean Validation, Problem Details responses |
 | Persistence | Spring Data JPA, Hibernate, PostgreSQL 17 |
 | Migrations | Flyway |
+| Security | Spring Security, BCrypt PIN hashing, server-side sessions, CSRF protection |
 | Testing | JUnit, Mockito, Spring Boot Test, MockMvc |
 | Frontend testing | Vitest, Angular TestBed |
 | Formatting | Spotless, google-java-format with AOSP style, Prettier |
@@ -206,8 +209,23 @@ Use these variables when connecting to a different local database. The database 
 ### 4. Run with simulation controls
 
 ```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=simulation"
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=simulation,demo"
 ```
+
+The `simulation` profile enables hardware state changes through the API.
+The `demo` profile creates missing demo accounts for local testing.
+
+| Role | Account | PIN |
+| :--- | :--- | :--- |
+| Cashier | Demo Cashier | `1111` |
+| Management | Demo Manager | `2222` |
+| Maintenance | Demo Maintenance | `3333` |
+| CIT | PIN-only login | `4444` |
+
+Demo accounts remain in the database after the `demo` profile is disabled.
+Existing accounts are not overwritten.
+
+Sessions expire 15 minutes after login. Refreshing the page preserves a valid session.
 
 The backend listens on **`http://127.0.0.1:8080`**.
 
@@ -246,7 +264,13 @@ The Angular development server proxies `/api/**` requests to
 | :--- | :--- | :--- |
 | `GET` | `/actuator/health` | Application health |
 | `GET` | `/api/machine/status` | Configuration, hardware, readiness and alerts |
-| `PUT` | `/api/simulation/hardware` | Full hardware state replacement; requires `simulation` profile |
+| `GET` | `/api/users?role=CASHIER` | Active profiles for the selected role; CIT profiles are not listed |
+| `GET` | `/api/auth/csrf` | CSRF token for the current session |
+| `POST` | `/api/auth/login` | Profile and PIN authentication |
+| `POST` | `/api/auth/cit-login` | PIN-only CIT authentication |
+| `GET` | `/api/auth/me` | Current authenticated user |
+| `POST` | `/api/auth/logout` | End the current session |
+| `PUT` | `/api/simulation/hardware` | Replace hardware state; requires `simulation`, `MAINTENANCE` access and CSRF |
 
 <details>
 <summary><strong>🧪 Try a fault scenario: printer offline</strong></summary>
@@ -254,6 +278,31 @@ The Angular development server proxies `/api/**` requests to
 Send a complete hardware snapshot:
 
 ```powershell
+$baseUrl = 'http://127.0.0.1:8080'
+
+$csrf = Invoke-RestMethod `
+    -Uri "$baseUrl/api/auth/csrf" `
+    -SessionVariable unitSession
+
+$loginBody = @{
+    userId = '00000000-0000-0000-0000-000000000003'
+    role   = 'MAINTENANCE'
+    pin    = '3333'
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+    -Uri "$baseUrl/api/auth/login" `
+    -Method Post `
+    -WebSession $unitSession `
+    -Headers @{ $csrf.headerName = $csrf.token } `
+    -ContentType 'application/json' `
+    -Body $loginBody
+
+# Login invalidates the previous CSRF token.
+$csrf = Invoke-RestMethod `
+    -Uri "$baseUrl/api/auth/csrf" `
+    -WebSession $unitSession
+
 $hardwareState = @{
     acceptor       = 'READY'
     cashbox        = 'PRESENT'
@@ -264,8 +313,10 @@ $hardwareState = @{
 } | ConvertTo-Json
 
 Invoke-RestMethod `
-    -Uri 'http://localhost:8080/api/simulation/hardware' `
+    -Uri "$baseUrl/api/simulation/hardware" `
     -Method Put `
+    -WebSession $unitSession `
+    -Headers @{ $csrf.headerName = $csrf.token } `
     -ContentType 'application/json' `
     -Body $hardwareState
 ```
@@ -273,7 +324,7 @@ Invoke-RestMethod `
 Read the resulting machine status:
 
 ```powershell
-Invoke-RestMethod 'http://localhost:8080/api/machine/status' |
+Invoke-RestMethod "$baseUrl/api/machine/status" |
     ConvertTo-Json -Depth 6
 ```
 
@@ -356,9 +407,10 @@ Backend coverage reports are generated with JaCoCo.
 
 JaCoCo excludes only the application bootstrap class from its report. A coverage threshold is not yet enforced by the build.
 
+<a id="roadmap"></a>
 ## 🗺️ Roadmap
 
-- [ ] Complete authentication and role-specific workflows
+- [x] Complete authentication and role-specific workflows
 - [ ] Implement deposits, cash collection and reporting
 - [ ] Add frontend controls for hardware fault simulation
 - [ ] Introduce audit history and interrupted-operation recovery
@@ -376,7 +428,7 @@ JaCoCo excludes only the application bootstrap class from its report. A coverage
 - Per-user daily reports require selecting a user.
 - Confirmed cashbox replacement resets the device total while preserving daily totals.
 
-These describe the intended behavior of future features, not completed functionality.
+Authentication is implemented. Deposit, reporting and cashbox replacement rules guide the upcoming workflows.
 
 </details>
 
@@ -384,7 +436,7 @@ These describe the intended behavior of future features, not completed functiona
 
 This is an independent educational and portfolio project based on observed machine behavior.
 
-It does not connect to real hardware, implement a vendor protocol or process real money. Authentication and authorization are planned; the current backend is configured for local use on the loopback interface.
+It does not connect to real hardware, implement a vendor protocol or process real money. The backend implements authentication and authorization and is configured for local use on the loopback interface.
 
 ## 📄 License
 
