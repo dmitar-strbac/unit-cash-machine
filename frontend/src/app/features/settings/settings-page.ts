@@ -1,19 +1,17 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-settings-page',
+  imports: [RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section aria-label="Settings">
       <div class="settings-grid">
-        <button class="machine-button" disabled>MANAGEMENT</button>
-        <button class="machine-button" disabled>MAINTENANCE</button>
-        <button class="machine-button" disabled>CIT</button>
+        <a class="machine-button" routerLink="/login/management">MANAGEMENT</a>
+        <a class="machine-button" routerLink="/login/maintenance">MAINTENANCE</a>
+        <a class="machine-button" routerLink="/login/cit">CIT</a>
       </div>
-
-      <p class="availability-note">
-        Role login will be available when authentication is implemented.
-      </p>
     </section>
   `,
   styles: `
@@ -27,13 +25,6 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
       min-height: 110px;
       padding: 16px;
       font-size: clamp(16px, 2.5vw, 24px);
-    }
-
-    .availability-note {
-      margin-top: 28px;
-      color: var(--muted);
-      text-align: center;
-      font-size: 15px;
     }
   `,
 })

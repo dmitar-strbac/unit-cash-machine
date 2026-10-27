@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { guestGuard, sessionGuard } from './core/auth/auth.guards';
 
 export const routes: Routes = [
   {
@@ -11,6 +12,40 @@ export const routes: Routes = [
     path: 'settings',
     title: 'Unit — Settings',
     loadComponent: () => import('./features/settings/settings-page').then((m) => m.SettingsPage),
+  },
+  {
+    path: 'login/cashier',
+    title: 'Unit — Cashier login',
+    canActivate: [guestGuard],
+    data: { role: 'CASHIER' },
+    loadComponent: () => import('./features/auth/login-page').then((m) => m.LoginPage),
+  },
+  {
+    path: 'login/management',
+    title: 'Unit — Management login',
+    canActivate: [guestGuard],
+    data: { role: 'MANAGEMENT' },
+    loadComponent: () => import('./features/auth/login-page').then((m) => m.LoginPage),
+  },
+  {
+    path: 'login/maintenance',
+    title: 'Unit — Maintenance login',
+    canActivate: [guestGuard],
+    data: { role: 'MAINTENANCE' },
+    loadComponent: () => import('./features/auth/login-page').then((m) => m.LoginPage),
+  },
+  {
+    path: 'login/cit',
+    title: 'Unit — CIT login',
+    canActivate: [guestGuard],
+    data: { role: 'CIT' },
+    loadComponent: () => import('./features/auth/login-page').then((m) => m.LoginPage),
+  },
+  {
+    path: 'session',
+    title: 'Unit — Session',
+    canActivate: [sessionGuard],
+    loadComponent: () => import('./features/auth/session-page').then((m) => m.SessionPage),
   },
   {
     path: 'diagnostics',

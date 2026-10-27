@@ -1,19 +1,29 @@
 <div class="simulator">
   <div class="machine-screen">
     <header class="machine-header">
-      @if (!isHome()) {
-        <a class="back-link" routerLink="/">
+      @if (backTarget(); as target) {
+        <a class="back-link" [routerLink]="target">
           <span aria-hidden="true">‹</span>
           BACK
         </a>
       }
 
-      <a class="brand" routerLink="/" aria-label="Unit home">
-        UNIT<span class="brand-mark" aria-hidden="true">◔</span>
-      </a>
+      <div class="header-identity">
+        @if (auth.user(); as user) {
+          <a class="current-user" routerLink="/session">{{ user.displayName }}</a>
+          <span class="identity-divider" aria-hidden="true"></span>
+        }
+
+        <a class="brand" [routerLink]="auth.user() ? '/session' : '/'" aria-label="Unit home">
+          UNIT<span class="brand-mark" aria-hidden="true">◔</span>
+        </a>
+      </div>
     </header>
 
     <main class="machine-content">
+      @if (auth.notice()) {
+        <p class="auth-notice" role="status">{{ auth.notice() }}</p>
+      }
       <router-outlet />
     </main>
 
