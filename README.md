@@ -15,10 +15,10 @@ featuring a touchscreen-inspired interface, simulated hardware and live diagnost
 **Simulated hardware · Explicit domain rules · Testable fault scenarios**
 
 [Overview](#-overview) ·
-[Architecture](#-architecture) ·
+[Architecture](#architecture) ·
 [Quick start](#-quick-start) ·
 [API demo](#-api-demo) ·
-[Roadmap](#-roadmap)
+[Roadmap](#roadmap)
 
 </div>
 
@@ -65,6 +65,7 @@ The project is developed incrementally, starting with hardware simulation before
 - **Versioned database schema.** Flyway applies migrations; Hibernate validates the resulting schema.
 - **Behavior-focused tests.** Tests cover faults, recovery, invalid requests and endpoint availability.
 
+<a id="architecture"></a>
 ## 🏗️ Architecture
 
 The Spring Boot backend is organized by feature, with separate API,
@@ -356,6 +357,7 @@ Backend coverage reports are generated with JaCoCo.
 
 JaCoCo excludes only the application bootstrap class from its report. A coverage threshold is not yet enforced by the build.
 
+<a id="roadmap"></a>
 ## 🗺️ Roadmap
 
 - [ ] Complete authentication and role-specific workflows

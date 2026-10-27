@@ -2,6 +2,7 @@ package rs.unit.backend.user.api;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -40,7 +41,10 @@ class UserDirectoryIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.webAppContextSetup(applicationContext).build();
+        mockMvc =
+                MockMvcBuilders.webAppContextSetup(applicationContext)
+                        .apply(springSecurity())
+                        .build();
 
         jdbcTemplate.update("UPDATE cash_machine.user_account SET active = FALSE");
     }
