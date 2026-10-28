@@ -28,6 +28,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import rs.unit.backend.authentication.application.AuthenticatedUser;
 import rs.unit.backend.authentication.application.AuthenticationService;
+import rs.unit.backend.authentication.application.SessionActivityService;
 import rs.unit.backend.user.domain.UserRole;
 
 @ExtendWith(MockitoExtension.class)
@@ -36,6 +37,7 @@ class AuthenticationControllerTest {
     @Mock private AuthenticationService authenticationService;
     @Mock private SecurityContextRepository contextRepository;
     @Mock private CsrfTokenRepository csrfRepository;
+    @Mock private SessionActivityService activityService;
 
     private AuthenticationController controller;
 
@@ -44,7 +46,7 @@ class AuthenticationControllerTest {
         SecurityContextHolder.clearContext();
         controller =
                 new AuthenticationController(
-                        authenticationService, contextRepository, csrfRepository);
+                        authenticationService, contextRepository, csrfRepository, activityService);
     }
 
     @AfterEach

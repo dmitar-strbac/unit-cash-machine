@@ -1,7 +1,9 @@
 package rs.unit.backend.authentication.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -20,6 +22,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpSession;
@@ -37,7 +40,11 @@ import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
-@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
+@SpringBootTest(
+        properties = {
+            "unit.collection.monitor.enabled=false",
+            "unit.deposit.monitor.enabled=false"
+        })
 @ActiveProfiles("simulation")
 @Transactional
 class AuthenticationIntegrationTest {
@@ -177,18 +184,108 @@ class AuthenticationIntegrationTest {
     }
 
     @Test
-    void pollingDoesNotExtendAbsoluteSessionLifetime() throws Exception {
+    void activityDoesNotExtendAbsoluteSessionLifetime() throws Exception {
         MockHttpSession session = loginCashier();
+
+        for (int seconds = 50; seconds < 900; seconds += 50) {
+            when(clock.instant()).thenReturn(now.plusSeconds(seconds));
+
+            mockMvc.perform(post("/api/auth/activity").session(session).with(csrf()))
+                    .andExpect(status().isNoContent());
+        }
 
         when(clock.instant()).thenReturn(now.plusSeconds(899));
 
-        mockMvc.perform(get("/api/machine/status").session(session)).andExpect(status().isOk());
+        mockMvc.perform(get("/api/auth/me").session(session)).andExpect(status().isOk());
 
         when(clock.instant()).thenReturn(now.plusSeconds(900));
 
         mockMvc.perform(get("/api/auth/me").session(session)).andExpect(status().isUnauthorized());
 
         assertTrue(session.isInvalid());
+    }
+
+    @Test
+    void pollingDoesNotExtendCashierInactivityDeadline() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        when(clock.instant()).thenReturn(now.plusSeconds(59));
+
+        mockMvc.perform(get("/api/machine/status").session(session)).andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/auth/me").session(session)).andExpect(status().isOk());
+
+        when(clock.instant()).thenReturn(now.plusSeconds(60));
+
+        mockMvc.perform(get("/api/auth/me").session(session)).andExpect(status().isUnauthorized());
+
+        assertTrue(session.isInvalid());
+    }
+
+    @Test
+    void explicitActivityExtendsCashierInactivityDeadline() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        when(clock.instant()).thenReturn(now.plusSeconds(50));
+
+        mockMvc.perform(post("/api/auth/activity").session(session).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        when(clock.instant()).thenReturn(now.plusSeconds(109));
+
+        mockMvc.perform(get("/api/auth/me").session(session)).andExpect(status().isOk());
+
+        when(clock.instant()).thenReturn(now.plusSeconds(110));
+
+        mockMvc.perform(get("/api/auth/me").session(session)).andExpect(status().isUnauthorized());
+
+        assertTrue(session.isInvalid());
+    }
+
+    @Test
+    void activityCannotBeRecordedForMissingDeposit() {
+        InvalidDataAccessApiUsageException exception =
+                assertThrows(
+                        InvalidDataAccessApiUsageException.class,
+                        () ->
+                                depositRepository.recordActivity(
+                                        UUID.randomUUID(), now.plusSeconds(60)));
+
+        assertInstanceOf(IllegalStateException.class, exception.getCause());
+        assertEquals(
+                "An active deposit is required to record activity.",
+                exception.getCause().getMessage());
+    }
+
+    @Test
+    void activityCannotBeRecordedAfterDepositCompletion() throws Exception {
+        MockHttpSession session = loginCashier();
+
+        UUID loginId =
+                jdbcTemplate.queryForObject(
+                        """
+                        SELECT login_id
+                        FROM cash_machine.deposit
+                        WHERE user_id = ?
+                            AND status = 'ACTIVE'
+                        """,
+                        UUID.class,
+                        cashierId);
+
+        mockMvc.perform(post("/api/auth/logout").session(session).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        InvalidDataAccessApiUsageException exception =
+                assertThrows(
+                        InvalidDataAccessApiUsageException.class,
+                        () -> depositRepository.recordActivity(loginId, now.plusSeconds(60)));
+
+        assertInstanceOf(IllegalStateException.class, exception.getCause());
+        assertEquals(
+                "An active deposit is required to record activity.",
+                exception.getCause().getMessage());
+
+        assertEquals("COMPLETED", depositRepository.findByLoginId(loginId).orElseThrow().status());
     }
 
     @Test

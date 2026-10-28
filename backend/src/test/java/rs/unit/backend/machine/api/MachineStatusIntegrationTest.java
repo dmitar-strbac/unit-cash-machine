@@ -21,7 +21,11 @@ import rs.unit.backend.machine.infrastructure.persistence.MachineConfiguration;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfigurationRepository;
 import rs.unit.backend.support.MachineTestState;
 
-@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
+@SpringBootTest(
+        properties = {
+            "unit.collection.monitor.enabled=false",
+            "unit.deposit.monitor.enabled=false"
+        })
 @Transactional
 class MachineStatusIntegrationTest {
 

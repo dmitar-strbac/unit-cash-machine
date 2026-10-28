@@ -16,8 +16,10 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
+import rs.unit.backend.authentication.application.SessionActivityService;
 import rs.unit.backend.collection.application.CollectionService;
 import rs.unit.backend.collection.infrastructure.CollectionLogoutFilter;
+import rs.unit.backend.deposit.application.DepositService;
 import rs.unit.backend.deposit.infrastructure.DepositLogoutHandler;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
@@ -48,7 +50,9 @@ public class SecurityConfiguration {
             Clock clock,
             UserAccountRepository userRepository,
             DepositLogoutHandler depositLogoutHandler,
-            CollectionService collectionService)
+            CollectionService collectionService,
+            SessionActivityService activityService,
+            DepositService depositService)
             throws Exception {
 
         http.formLogin(AbstractHttpConfigurer::disable)
@@ -77,6 +81,8 @@ public class SecurityConfiguration {
                                                 "/api/auth/cit-login")
                                         .permitAll()
                                         .requestMatchers("/api/auth/me")
+                                        .authenticated()
+                                        .requestMatchers(HttpMethod.POST, "/api/auth/activity")
                                         .authenticated()
                                         .requestMatchers("/api/simulation/**")
                                         .hasRole("MAINTENANCE")
@@ -126,7 +132,7 @@ public class SecurityConfiguration {
                                                         response.setStatus(204)));
 
         http.addFilterAfter(
-                new SessionValidityFilter(clock, userRepository),
+                new SessionValidityFilter(clock, userRepository, activityService, depositService),
                 SecurityContextHolderFilter.class);
 
         http.addFilterBefore(new CollectionLogoutFilter(collectionService), LogoutFilter.class);

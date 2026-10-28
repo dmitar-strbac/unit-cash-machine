@@ -101,6 +101,8 @@ class DepositServiceTest {
         lenient().when(repository.totals(activeDeposit.id())).thenReturn(new Totals(0, 0));
 
         lenient().when(hardware.snapshot()).thenReturn(readyHardware());
+
+        lenient().when(repository.hasValidSession(loginId, runtimeId, now)).thenReturn(true);
     }
 
     @Test
@@ -441,6 +443,39 @@ class DepositServiceTest {
         when(repository.hasUnfinishedCollection()).thenReturn(true);
 
         assertFalse(service.current(cashier).acceptingEnabled());
+    }
+
+    @Test
+    void inactiveSessionCannotReadDepositOrInsertBanknotes() {
+        when(repository.hasValidSession(loginId, runtimeId, now)).thenReturn(false);
+
+        assertStatus(HttpStatus.UNAUTHORIZED, () -> service.current(cashier));
+
+        assertStatus(
+                HttpStatus.UNAUTHORIZED,
+                () -> service.insert(cashier, UUID.randomUUID(), "EUR", 20));
+
+        verify(repository, never())
+                .recordOperation(
+                        any(UUID.class),
+                        any(UUID.class),
+                        anyString(),
+                        anyInt(),
+                        any(Outcome.class),
+                        any(Instant.class));
+    }
+
+    @Test
+    void sessionIsInactiveAtAbsoluteExpirationWithoutCheckingDepositValidity() {
+        var expired = new AuthenticatedUser(userId, "Test Cashier", UserRole.CASHIER, now, loginId);
+
+        assertFalse(service.isSessionActive(expired));
+
+        verify(repository).closeUnavailableDeposits(runtimeId, now);
+        verify(repository).closeDepositsOfUnavailableAccounts(now);
+
+        verify(repository, never())
+                .hasValidSession(any(UUID.class), any(UUID.class), any(Instant.class));
     }
 
     private StoredDeposit deposit(

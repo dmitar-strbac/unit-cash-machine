@@ -10,39 +10,50 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.logout.SecurityContextLogoutHandler;
 import org.springframework.web.filter.OncePerRequestFilter;
 import rs.unit.backend.authentication.application.AuthenticatedUser;
+import rs.unit.backend.authentication.application.SessionActivityService;
+import rs.unit.backend.deposit.application.DepositService;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
 public class SessionValidityFilter extends OncePerRequestFilter {
 
     private final Clock clock;
     private final UserAccountRepository repository;
+    private final SessionActivityService activityService;
+    private final DepositService deposits;
 
-    public SessionValidityFilter(Clock clock, UserAccountRepository repository) {
+    public SessionValidityFilter(
+            Clock clock,
+            UserAccountRepository repository,
+            SessionActivityService activityService,
+            DepositService deposits) {
         this.clock = clock;
         this.repository = repository;
+        this.activityService = activityService;
+        this.deposits = deposits;
     }
 
     @Override
     protected void doFilterInternal(
             HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-
         var authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication != null
                 && authentication.getPrincipal() instanceof AuthenticatedUser user) {
-
-            boolean expired = !clock.instant().isBefore(user.expiresAt());
-
             boolean accountValid =
-                    !expired
+                    clock.instant().isBefore(user.expiresAt())
                             && repository
                                     .findById(user.id())
                                     .filter(account -> account.isActive())
                                     .filter(account -> account.getRole() == user.role())
                                     .isPresent();
 
-            if (!accountValid) {
+            boolean sessionValid =
+                    accountValid && activityService.isActive(user, request.getSession(false));
+
+            if (!sessionValid) {
+                deposits.reconcile();
+
                 new SecurityContextLogoutHandler().logout(request, response, authentication);
             }
         }

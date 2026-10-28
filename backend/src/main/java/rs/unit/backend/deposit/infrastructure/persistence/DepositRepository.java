@@ -9,8 +9,10 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
+import rs.unit.backend.authentication.application.SessionTimeoutPolicy;
 import rs.unit.backend.deposit.domain.BanknotePolicy.Outcome;
 import rs.unit.backend.machine.infrastructure.persistence.MachineOperationLock;
+import rs.unit.backend.user.domain.UserRole;
 
 @Repository
 public class DepositRepository {
@@ -59,16 +61,21 @@ public class DepositRepository {
                 """
                 UPDATE cash_machine.deposit
                 SET status = CASE
-                        WHEN expires_at <= ? THEN 'EXPIRED'
+                        WHEN LEAST(expires_at, inactivity_expires_at) <= ?
+                            THEN 'EXPIRED'
                         ELSE 'INTERRUPTED'
                     END,
                     finished_at = CASE
-                        WHEN expires_at <= ? THEN expires_at
+                        WHEN LEAST(expires_at, inactivity_expires_at) <= ?
+                            THEN LEAST(expires_at, inactivity_expires_at)
                         ELSE ?
                     END
                 WHERE machine_id = 1
                     AND status = 'ACTIVE'
-                    AND (expires_at <= ? OR runtime_id <> ?)
+                    AND (
+                        LEAST(expires_at, inactivity_expires_at) <= ?
+                        OR runtime_id <> ?
+                    )
                 """,
                 timestamp(now),
                 timestamp(now),
@@ -100,6 +107,9 @@ public class DepositRepository {
             UUID runtimeId,
             Instant startedAt,
             Instant expiresAt) {
+        Instant inactivityExpiresAt =
+                SessionTimeoutPolicy.inactivityDeadline(UserRole.CASHIER, startedAt, expiresAt);
+
         jdbc.update(
                 """
                 INSERT INTO cash_machine.deposit (
@@ -111,10 +121,11 @@ public class DepositRepository {
                     status,
                     started_at,
                     expires_at,
+                    inactivity_expires_at,
                     cash_cycle_id
                 )
                 VALUES (
-                    ?, 1, ?, ?, ?, 'ACTIVE', ?, ?,
+                    ?, 1, ?, ?, ?, 'ACTIVE', ?, ?, ?,
                     (
                         SELECT id
                         FROM cash_machine.cash_cycle
@@ -128,7 +139,8 @@ public class DepositRepository {
                 loginId,
                 runtimeId,
                 timestamp(startedAt),
-                timestamp(expiresAt));
+                timestamp(expiresAt),
+                timestamp(inactivityExpiresAt));
     }
 
     public Optional<StoredDeposit> findByLoginId(UUID loginId) {
@@ -228,6 +240,46 @@ public class DepositRepository {
                 """,
                 timestamp(finishedAt),
                 depositId);
+    }
+
+    public boolean hasValidSession(UUID loginId, UUID runtimeId, Instant now) {
+        Boolean valid =
+                jdbc.queryForObject(
+                        """
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM cash_machine.deposit
+                            WHERE login_id = ?
+                                AND runtime_id = ?
+                                AND status = 'ACTIVE'
+                                AND expires_at > ?
+                                AND inactivity_expires_at > ?
+                        )
+                        """,
+                        Boolean.class,
+                        loginId,
+                        runtimeId,
+                        timestamp(now),
+                        timestamp(now));
+
+        return Boolean.TRUE.equals(valid);
+    }
+
+    public void recordActivity(UUID loginId, Instant deadline) {
+        int changed =
+                jdbc.update(
+                        """
+                        UPDATE cash_machine.deposit
+                        SET inactivity_expires_at = LEAST(expires_at, ?)
+                        WHERE login_id = ?
+                            AND status = 'ACTIVE'
+                        """,
+                        timestamp(deadline),
+                        loginId);
+
+        if (changed != 1) {
+            throw new IllegalStateException("An active deposit is required to record activity.");
+        }
     }
 
     private StoredDeposit mapDeposit(ResultSet rs, int rowNumber) throws SQLException {

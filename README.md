@@ -44,7 +44,6 @@ Authentication, deposits and cash collection are implemented. Reports, virtual p
 | 🧾 Reporting | Device, daily and per-user reports with virtual printing | Planned |
 | 🛠️ Maintenance | Diagnostics commands and simulated device lifecycle operations | Planned |
 
-## 🧠 Engineering decisions
 
 ## 🧠 Engineering decisions
 
