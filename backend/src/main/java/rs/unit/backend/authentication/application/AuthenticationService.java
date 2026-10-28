@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import rs.unit.backend.collection.application.CollectionService;
 import rs.unit.backend.deposit.application.DepositService;
 import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
@@ -21,6 +22,7 @@ public class AuthenticationService {
     private final UserAccountRepository repository;
     private final PinService pinService;
     private final DepositService depositService;
+    private final CollectionService collectionService;
     private final LoginAttemptLimiter attemptLimiter;
     private final Clock clock;
 
@@ -30,11 +32,13 @@ public class AuthenticationService {
             UserAccountRepository repository,
             PinService pinService,
             DepositService depositService,
+            CollectionService collectionService,
             LoginAttemptLimiter attemptLimiter,
             Clock clock) {
         this.repository = repository;
         this.pinService = pinService;
         this.depositService = depositService;
+        this.collectionService = collectionService;
         this.attemptLimiter = attemptLimiter;
         this.clock = clock;
         this.dummyPinHash = pinService.encode("000000000000");
@@ -66,7 +70,7 @@ public class AuthenticationService {
         return user;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthenticatedUser loginCit(String pin) {
         attemptLimiter.acquire();
 
@@ -88,7 +92,11 @@ public class AuthenticationService {
             throw invalidCredentials();
         }
 
-        return authenticatedUser(matches.getFirst());
+        AuthenticatedUser user = authenticatedUser(matches.getFirst());
+
+        collectionService.beginOrResume(user);
+
+        return user;
     }
 
     private AuthenticatedUser authenticatedUser(UserAccount account) {

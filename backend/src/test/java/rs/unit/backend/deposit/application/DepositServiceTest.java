@@ -412,6 +412,37 @@ class DepositServiceTest {
         verify(repository, never()).findByLoginId(any(UUID.class));
     }
 
+    @Test
+    void rejectsStartingDepositDuringUnfinishedCollection() {
+        when(repository.hasUnfinishedCollection()).thenReturn(true);
+
+        assertStatus(HttpStatus.CONFLICT, () -> service.start(cashier));
+    }
+
+    @Test
+    void rejectsNewBanknoteDuringUnfinishedCollection() {
+        when(repository.hasUnfinishedCollection()).thenReturn(true);
+
+        assertStatus(
+                HttpStatus.CONFLICT, () -> service.insert(cashier, UUID.randomUUID(), "EUR", 20));
+
+        verify(repository, never())
+                .recordOperation(
+                        any(UUID.class),
+                        any(UUID.class),
+                        anyString(),
+                        anyInt(),
+                        any(Outcome.class),
+                        any(Instant.class));
+    }
+
+    @Test
+    void unfinishedCollectionDisablesBanknoteAcceptance() {
+        when(repository.hasUnfinishedCollection()).thenReturn(true);
+
+        assertFalse(service.current(cashier).acceptingEnabled());
+    }
+
     private StoredDeposit deposit(
             UUID ownerId,
             UUID applicationRuntimeId,

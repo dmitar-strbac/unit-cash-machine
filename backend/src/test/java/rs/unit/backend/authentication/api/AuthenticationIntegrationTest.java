@@ -36,7 +36,7 @@ import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
-@SpringBootTest
+@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
 @ActiveProfiles("simulation")
 @Transactional
 class AuthenticationIntegrationTest {

@@ -18,7 +18,7 @@ import org.springframework.web.context.WebApplicationContext;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfiguration;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfigurationRepository;
 
-@SpringBootTest
+@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
 class MachineStatusIntegrationTest {
 
     @Autowired private WebApplicationContext applicationContext;

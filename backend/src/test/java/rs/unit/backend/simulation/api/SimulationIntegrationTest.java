@@ -25,7 +25,7 @@ import org.springframework.web.context.WebApplicationContext;
 import rs.unit.backend.hardware.model.HardwareSnapshot;
 import rs.unit.backend.hardware.simulator.SimulatedHardware;
 
-@SpringBootTest
+@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
 @ActiveProfiles("simulation")
 class SimulationIntegrationTest {
 
