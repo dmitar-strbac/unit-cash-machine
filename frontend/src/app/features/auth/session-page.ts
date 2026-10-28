@@ -4,14 +4,20 @@ import { Router } from '@angular/router';
 import { finalize } from 'rxjs';
 import { authErrorMessage } from '../../core/auth/auth-error';
 import { AuthService } from '../../core/auth/auth.service';
+import { DepositService } from '../../core/deposit/deposit.service';
+import { DepositPanel } from '../deposit/deposit-panel';
 
 @Component({
   selector: 'app-session-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DepositPanel],
   template: `
     <section class="session-page" aria-label="Current session">
       @if (auth.user(); as user) {
         @switch (user.role) {
+          @case ('CASHIER') {
+            <app-deposit-panel [ending]="busy()" />
+          }
           @case ('MANAGEMENT') {
             <div class="session-menu">
               <button class="machine-button menu-button" disabled>INVENTORY</button>
@@ -36,7 +42,13 @@ import { AuthService } from '../../core/auth/auth.service';
             <p class="logout-error" role="alert">{{ error() }}</p>
           }
 
-          <button class="machine-button logout-button" [disabled]="busy()" (click)="logout()">
+          <button
+            class="machine-button logout-button"
+            [disabled]="
+              busy() || (user.role === 'CASHIER' && (deposits.busy() || !!deposits.pending()))
+            "
+            (click)="logout()"
+          >
             {{ busy() ? 'SIGNING OUT…' : 'LOG OUT' }}
           </button>
         </div>
@@ -108,12 +120,17 @@ export class SessionPage {
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly deposits = inject(DepositService);
 
   protected readonly busy = signal(false);
   protected readonly error = signal('');
 
   protected logout(): void {
-    if (this.busy()) {
+    if (
+      this.busy() ||
+      (this.auth.user()?.role === 'CASHIER' &&
+        (this.deposits.busy() || this.deposits.pending() !== null))
+    ) {
       return;
     }
 
@@ -128,6 +145,7 @@ export class SessionPage {
       )
       .subscribe({
         next: () => {
+          this.deposits.clear();
           void this.router.navigateByUrl('/', { replaceUrl: true });
         },
         error: (error: unknown) => {

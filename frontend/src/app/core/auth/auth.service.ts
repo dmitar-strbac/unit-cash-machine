@@ -1,11 +1,13 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
-import { Observable, catchError, of, switchMap, tap, throwError, timeout } from 'rxjs';
-import { AuthenticatedUser, CsrfResponse, UserRole, UserSummary } from './auth.models';
+import { Observable, catchError, of, tap, throwError, timeout } from 'rxjs';
+import { CsrfHttpService } from '../http/csrf-http.service';
+import { AuthenticatedUser, UserRole, UserSummary } from './auth.models';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
+  private readonly csrf = inject(CsrfHttpService);
   private readonly currentUser = signal<AuthenticatedUser | null>(null);
 
   private sessionRevision = 0;
@@ -74,15 +76,6 @@ export class AuthService {
   }
 
   private postWithCsrf<T>(url: string, body: unknown): Observable<T> {
-    return this.http.get<CsrfResponse>('/api/auth/csrf').pipe(
-      timeout(8000),
-      switchMap((csrf) =>
-        this.http
-          .post<T>(url, body, {
-            headers: { [csrf.headerName]: csrf.token },
-          })
-          .pipe(timeout(8000)),
-      ),
-    );
+    return this.csrf.post<T>(url, body);
   }
 }

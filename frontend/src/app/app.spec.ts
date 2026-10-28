@@ -42,9 +42,13 @@ describe('App', () => {
         provideRouter([]),
         {
           provide: MachineStatusService,
-          AuthService,
           useValue: {
             connection$: connection.asObservable(),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
             user: signal(null),
             notice: signal(''),
             refresh: () => of(null),

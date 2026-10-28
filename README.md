@@ -30,7 +30,9 @@ A cash deposit machine needs to do more than count banknotes. It must know wheth
 
 **Unit Cash Machine** is a local simulator inspired by observed workflows on a physical cash deposit machine. The current backend models six hardware components and exposes a consistent view of machine readiness and diagnostics.
 
-The project is developed incrementally. Hardware simulation, diagnostics and PIN-based authentication are implemented; deposits, cash collection and reporting are planned.
+The project is developed incrementally. Hardware simulation, diagnostics,
+PIN-based authentication and EUR deposits are implemented. Cash collection,
+reporting, maintenance commands and extended recovery scenarios are planned.
 
 ## ✨ Features
 
@@ -40,9 +42,10 @@ The project is developed incrementally. Hardware simulation, diagnostics and PIN
 | 🔌 Hardware simulation | Six modeled components, readiness rules and API-based fault injection | Available |
 | 🚦 Diagnostics | Component alerts, severity indicators and connection-loss feedback | Available |
 | 🔐 Authentication | Profile selection, PIN login and role-based access | Available |
-| 💶 Deposits | EUR banknote acceptance and persistent deposit records | Planned |
+| 💶 Deposits | EUR banknote acceptance and persistent deposit records | Available |
 | 🚚 Cash collection | CIT workflow and cashbox replacement | Planned |
 | 🧾 Reporting | Daily, per-user and device totals with simulated printing | Planned |
+| 🛠️ Maintenance | Diagnostics commands and simulated device lifecycle operations | Planned |
 
 ### Six components, one consistent snapshot
 
@@ -61,10 +64,14 @@ The project is developed incrementally. Hardware simulation, diagnostics and PIN
 - **One snapshot per status request.** Readiness and diagnostics use the same immutable hardware snapshot.
 - **Domain rules outside controllers.** Readiness and alert policies can be tested without starting Spring or connecting to a database.
 - **Atomic state replacement.** The simulator replaces the complete snapshot without exposing a partially updated state.
-- **Controlled simulation API.** State-changing endpoints require the `simulation` profile.
 - **Versioned database schema.** Flyway applies migrations; Hibernate validates the resulting schema.
-- **Behavior-focused tests.** Tests cover faults, recovery, invalid requests and endpoint availability.  
-- **Controlled simulation API.** State-changing simulation endpoints require the `simulation` profile, an authenticated `MAINTENANCE` user and a valid CSRF token.
+- **Behavior-focused tests.** Tests cover readiness rules, authentication, deposit validation, duplicate requests and selected failure and recovery paths. Extended concurrency and interruption testing is planned.
+- **Role-specific simulation controls.** Hardware changes require the `simulation` profile, `MAINTENANCE` access and CSRF protection. Simulated banknote insertion requires the `simulation` profile, `CASHIER` access and CSRF protection.
+- **Immediate banknote persistence.** Each accepted banknote is recorded in its own request transaction; logout completes the deposit without being responsible for saving previously accepted money.
+- **Duplicate-request protection.** Each banknote operation has a unique identifier. Repeating the same operation returns its recorded outcome without counting it again; reusing the identifier with different contents is rejected.
+- **One active deposit per machine.** Transactional row locking and a database constraint prevent multiple active deposits.
+- **Server-authoritative totals.** Deposit totals are calculated from accepted banknote records and displayed by the frontend.
+- **Unconfirmed-operation handling.** The frontend preserves a pending operation in session storage and retries it with the same identifier after an uncertain response.
 
 <a id="architecture"></a>
 ## 🏗️ Architecture
@@ -94,6 +101,15 @@ flowchart TD
 Persistent application data is stored in PostgreSQL, with schema changes
 managed by Flyway. Simulated hardware state is held in memory and resets
 when the backend restarts.
+
+User accounts and machine configuration use Spring Data JPA. Deposit records
+and banknote operations use a dedicated JDBC repository with explicit SQL
+and transactional locking.
+
+Authenticated HTTP sessions are not restored after a backend restart.
+Deposit records remain in PostgreSQL. When the next cashier deposit starts,
+the application closes stale active deposits as `EXPIRED` or `INTERRUPTED`.
+This reconciliation runs on the next cashier login, not as a background task.
 
 ## 🚦 Readiness and diagnostics
 
@@ -137,6 +153,7 @@ flowchart TD
 | Persistence | Spring Data JPA, Hibernate, PostgreSQL 17 |
 | Migrations | Flyway |
 | Security | Spring Security, BCrypt PIN hashing, server-side sessions, CSRF protection |
+| Persistence | Spring Data JPA, Hibernate, Spring JDBC (`JdbcTemplate`), PostgreSQL 17 |
 | Testing | JUnit, Mockito, Spring Boot Test, MockMvc |
 | Frontend testing | Vitest, Angular TestBed |
 | Formatting | Spotless, google-java-format with AOSP style, Prettier |
@@ -212,7 +229,8 @@ Use these variables when connecting to a different local database. The database 
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=simulation,demo"
 ```
 
-The `simulation` profile enables hardware state changes through the API.
+The `simulation` profile enables hardware state changes and simulated
+banknote insertion through the API.
 The `demo` profile creates missing demo accounts for local testing.
 
 | Role | Account | PIN |
@@ -229,7 +247,7 @@ Sessions expire 15 minutes after login. Refreshing the page preserves a valid se
 
 The backend listens on **`http://127.0.0.1:8080`**.
 
-To run without the state-changing simulation endpoint:
+To run without hardware mutation and banknote insertion simulation endpoints:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
@@ -269,8 +287,36 @@ The Angular development server proxies `/api/**` requests to
 | `POST` | `/api/auth/login` | Profile and PIN authentication |
 | `POST` | `/api/auth/cit-login` | PIN-only CIT authentication |
 | `GET` | `/api/auth/me` | Current authenticated user |
-| `POST` | `/api/auth/logout` | End the current session |
 | `PUT` | `/api/simulation/hardware` | Replace hardware state; requires `simulation`, `MAINTENANCE` access and CSRF |
+| `POST` | `/api/auth/logout` | Complete the cashier deposit, if applicable, and end the current session |
+| `GET` | `/api/deposits/current` | Current deposit and acceptance availability; requires `CASHIER` access |
+| `POST` | `/api/deposits/current/banknotes` | Simulate one banknote; requires `simulation`, `CASHIER` access and CSRF |
+
+### Banknote request
+
+After cashier login, obtain a fresh CSRF token and send the request using
+the authenticated session:
+
+```http
+POST /api/deposits/current/banknotes
+Content-Type: application/json
+X-CSRF-TOKEN: <token>
+```
+
+```json
+{
+  "operationId": "f4833abb-9de5-48e6-b956-b906139a635b",
+  "currency": "EUR",
+  "denomination": 20
+}
+```
+
+Use a new `operationId` for each new banknote. Retry an uncertain operation
+with its original identifier and unchanged contents.
+
+Possible outcomes are `ACCEPTED`, `CURRENCY_REJECTED` and
+`DENOMINATION_REJECTED`. The response includes the current deposit;
+`totalCents` is expressed in cents.
 
 <details>
 <summary><strong>🧪 Try a fault scenario: printer offline</strong></summary>
@@ -399,9 +445,17 @@ Tests cover domain rules, application behavior, API validation and frontend
 status feedback. New functionality is developed alongside tests for its
 expected behavior and failure scenarios.
 
-Backend integration tests use the configured PostgreSQL database and apply
-Flyway migrations. Use a local development or dedicated test database.
-Frontend unit tests use mocked services and do not require a running backend.
+Backend tests cover hardware readiness, diagnostics, authentication,
+session validity, deposit ownership, banknote acceptance and rejection,
+duplicate operations, logout completion and stale-deposit reconciliation.
+
+Frontend tests cover authentication, status feedback, CSRF-protected
+banknote requests, preservation and retry of unconfirmed operations,
+currency rejection and protection against stale responses overwriting
+newer totals.
+
+Extended tests using concurrent transactions, database failures and
+interrupted sessions remain planned.
 
 Backend coverage reports are generated with JaCoCo.
 
@@ -410,14 +464,20 @@ JaCoCo excludes only the application bootstrap class from its report. A coverage
 <a id="roadmap"></a>
 ## 🗺️ Roadmap
 
-- [x] Complete authentication and role-specific workflows
-- [ ] Implement deposits, cash collection and reporting
+- [x] Configure PostgreSQL, Flyway and application persistence
+- [x] Implement hardware simulation, readiness rules and diagnostics
+- [x] Build the Angular machine interface and live status feedback
+- [x] Implement PIN authentication, role-based access and server-side sessions
+- [x] Implement EUR deposits, banknote simulation and duplicate-request protection
+- [ ] Implement CIT collection and cashbox replacement
+- [ ] Implement device and daily reports with virtual printing
+- [ ] Implement maintenance commands and device lifecycle simulation
 - [ ] Add frontend controls for hardware fault simulation
-- [ ] Introduce audit history and interrupted-operation recovery
+- [ ] Extend audit history and test concurrency, interruptions and recovery
 - [ ] Isolate integration test databases and add continuous integration
 
 <details>
-<summary><strong>Observed requirements guiding future workflows</strong></summary>
+<summary><strong>Observed workflow requirements</strong></summary>
 
 - Cashiers select a profile and authenticate with a PIN.
 - CIT operators authenticate with a unique PIN without selecting a profile.
@@ -428,7 +488,8 @@ JaCoCo excludes only the application bootstrap class from its report. A coverage
 - Per-user daily reports require selecting a user.
 - Confirmed cashbox replacement resets the device total while preserving daily totals.
 
-Authentication is implemented. Deposit, reporting and cashbox replacement rules guide the upcoming workflows.
+Authentication and deposit rules are implemented. Reporting and cashbox
+replacement requirements guide the upcoming workflows.
 
 </details>
 
