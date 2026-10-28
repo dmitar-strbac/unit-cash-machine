@@ -15,6 +15,7 @@ import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository.Stor
 import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository.StoredOperation;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
 import rs.unit.backend.machine.domain.MachineReadinessPolicy;
+import rs.unit.backend.report.application.ReportingService;
 import rs.unit.backend.user.domain.UserRole;
 
 @Service
@@ -24,11 +25,17 @@ public class DepositService {
     private final HardwareStatusPort hardware;
     private final Clock clock;
     private final UUID runtimeId = UUID.randomUUID();
+    private final ReportingService reporting;
 
-    public DepositService(DepositRepository repository, HardwareStatusPort hardware, Clock clock) {
+    public DepositService(
+            DepositRepository repository,
+            HardwareStatusPort hardware,
+            Clock clock,
+            ReportingService reporting) {
         this.repository = repository;
         this.hardware = hardware;
         this.clock = clock;
+        this.reporting = reporting;
     }
 
     @Transactional
@@ -43,6 +50,8 @@ public class DepositService {
         repository.closeUnavailableDeposits(runtimeId, now);
 
         repository.closeDepositsOfUnavailableAccounts(now);
+
+        reporting.captureFinishedDeposits();
 
         if (repository.hasUnfinishedCollection()) {
             throw new ResponseStatusException(
@@ -132,10 +141,12 @@ public class DepositService {
         StoredDeposit deposit = findOwnedDeposit(user);
 
         if (!"ACTIVE".equals(deposit.status())) {
+            reporting.captureDeposit(deposit.id());
             return;
         }
 
         repository.complete(deposit.id(), clock.instant());
+        reporting.captureDeposit(deposit.id());
     }
 
     private StoredDeposit findOwnedDeposit(AuthenticatedUser user) {
@@ -189,6 +200,7 @@ public class DepositService {
 
         repository.closeUnavailableDeposits(runtimeId, now);
         repository.closeDepositsOfUnavailableAccounts(now);
+        reporting.captureFinishedDeposits();
     }
 
     @Transactional
@@ -200,6 +212,7 @@ public class DepositService {
 
         repository.closeUnavailableDeposits(runtimeId, now);
         repository.closeDepositsOfUnavailableAccounts(now);
+        reporting.captureFinishedDeposits();
 
         return now.isBefore(user.expiresAt())
                 && repository.hasValidSession(user.loginId(), runtimeId, now);
@@ -235,6 +248,7 @@ public class DepositService {
 
         repository.closeUnavailableDeposits(runtimeId, now);
         repository.closeDepositsOfUnavailableAccounts(now);
+        reporting.captureFinishedDeposits();
 
         return !repository.hasActiveDeposit();
     }

@@ -69,6 +69,8 @@ class CollectionIntegrationTest {
     void setUp() {
         when(clock.instant()).thenReturn(now);
 
+        jdbc.update("DELETE FROM cash_machine.print_attempt");
+        jdbc.update("DELETE FROM cash_machine.receipt");
         jdbc.update("DELETE FROM cash_machine.cash_collection_event");
         jdbc.update("DELETE FROM cash_machine.cash_collection");
         jdbc.update("DELETE FROM cash_machine.deposit_banknote_operation");

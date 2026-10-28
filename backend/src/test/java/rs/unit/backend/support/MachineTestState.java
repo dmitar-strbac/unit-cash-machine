@@ -13,6 +13,8 @@ public final class MachineTestState {
                     "Machine test state must be reset inside a test transaction.");
         }
 
+        jdbc.update("DELETE FROM cash_machine.print_attempt");
+        jdbc.update("DELETE FROM cash_machine.receipt");
         jdbc.update("DELETE FROM cash_machine.cash_collection_event");
         jdbc.update("DELETE FROM cash_machine.cash_collection");
         jdbc.update("DELETE FROM cash_machine.deposit_banknote_operation");

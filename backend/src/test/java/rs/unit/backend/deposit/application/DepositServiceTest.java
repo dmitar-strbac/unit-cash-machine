@@ -41,6 +41,7 @@ import rs.unit.backend.hardware.model.HardwareSnapshot.ExtensionBoardState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.LockState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.PrinterState;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
+import rs.unit.backend.report.application.ReportingService;
 import rs.unit.backend.user.domain.UserRole;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +50,8 @@ class DepositServiceTest {
     @Mock private DepositRepository repository;
 
     @Mock private HardwareStatusPort hardware;
+
+    @Mock private ReportingService reporting;
 
     private final Instant now = Instant.parse("2026-01-01T12:00:00Z");
     private final UUID userId = UUID.randomUUID();
@@ -65,7 +68,9 @@ class DepositServiceTest {
                 new AuthenticatedUser(
                         userId, "Test Cashier", UserRole.CASHIER, now.plusSeconds(900), loginId);
 
-        service = new DepositService(repository, hardware, Clock.fixed(now, ZoneOffset.UTC));
+        service =
+                new DepositService(
+                        repository, hardware, Clock.fixed(now, ZoneOffset.UTC), reporting);
 
         service.start(cashier);
 
@@ -95,6 +100,8 @@ class DepositServiceTest {
                         null);
 
         clearInvocations(repository);
+
+        clearInvocations(reporting);
 
         lenient().when(repository.findByLoginId(loginId)).thenReturn(Optional.of(activeDeposit));
 
@@ -388,6 +395,7 @@ class DepositServiceTest {
 
         verify(repository).lockMachine();
         verify(repository).complete(activeDeposit.id(), now);
+        verify(reporting).captureDeposit(activeDeposit.id());
     }
 
     @Test

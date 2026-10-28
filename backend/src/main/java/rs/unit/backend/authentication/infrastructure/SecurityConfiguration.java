@@ -86,6 +86,21 @@ public class SecurityConfiguration {
                                         .authenticated()
                                         .requestMatchers("/api/simulation/**")
                                         .hasRole("MAINTENANCE")
+                                        .requestMatchers(
+                                                HttpMethod.GET,
+                                                "/api/receipt-access",
+                                                "/api/receipt-access/pdf")
+                                        .permitAll()
+                                        .requestMatchers(
+                                                "/api/reports/**",
+                                                "/api/reports",
+                                                "/api/receipts/**",
+                                                "/api/receipts")
+                                        .hasRole("MANAGEMENT")
+                                        .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/deposits/current/receipt-access")
+                                        .hasRole("CASHIER")
                                         .requestMatchers(HttpMethod.GET, "/api/deposits/current")
                                         .hasRole("CASHIER")
                                         .requestMatchers(
