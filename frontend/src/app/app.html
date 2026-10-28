@@ -10,11 +10,11 @@
 
       <div class="header-identity">
         @if (auth.user(); as user) {
-          <a class="current-user" routerLink="/session">{{ user.displayName }}</a>
+          <a class="current-user" [routerLink]="sessionTarget()">{{ user.displayName }}</a>
           <span class="identity-divider" aria-hidden="true"></span>
         }
 
-        <a class="brand" [routerLink]="auth.user() ? '/session' : '/'" aria-label="Unit home">
+        <a class="brand" [routerLink]="auth.user() ? sessionTarget() : '/'">
           UNIT<span class="brand-mark" aria-hidden="true">◔</span>
         </a>
       </div>

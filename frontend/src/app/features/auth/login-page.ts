@@ -149,8 +149,10 @@ export class LoginPage {
         takeUntilDestroyed(this.destroyRef),
       )
       .subscribe({
-        next: () => {
-          void this.router.navigateByUrl('/session', { replaceUrl: true });
+        next: (user) => {
+          void this.router.navigateByUrl(user.role === 'CIT' ? '/cit' : '/session', {
+            replaceUrl: true,
+          });
         },
         error: (error: unknown) => {
           if (error instanceof HttpErrorResponse && error.status === 409) {
@@ -160,9 +162,13 @@ export class LoginPage {
               .subscribe({
                 next: (user) => {
                   if (user) {
-                    void this.router.navigateByUrl('/session', { replaceUrl: true });
+                    void this.router.navigateByUrl(user.role === 'CIT' ? '/cit' : '/session', {
+                      replaceUrl: true,
+                    });
                   } else {
-                    this.error.set('Another deposit is active. Finish it before signing in.');
+                    this.error.set(
+                      'The machine is unavailable. Check the active operation and diagnostics.',
+                    );
                   }
                 },
                 error: () => {

@@ -32,11 +32,12 @@ import org.springframework.web.context.WebApplicationContext;
 import rs.unit.backend.authentication.application.LoginAttemptLimiter;
 import rs.unit.backend.authentication.application.PinService;
 import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository;
+import rs.unit.backend.support.MachineTestState;
 import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
-@SpringBootTest
+@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
 @ActiveProfiles("simulation")
 @Transactional
 class AuthenticationIntegrationTest {
@@ -59,6 +60,8 @@ class AuthenticationIntegrationTest {
 
     @BeforeEach
     void setUp() {
+        MachineTestState.reset(jdbcTemplate);
+
         when(clock.instant()).thenReturn(now);
 
         mockMvc =

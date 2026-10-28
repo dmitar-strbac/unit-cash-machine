@@ -18,20 +18,26 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 import rs.unit.backend.hardware.model.HardwareSnapshot;
 import rs.unit.backend.hardware.simulator.SimulatedHardware;
+import rs.unit.backend.support.MachineTestState;
 
-@SpringBootTest
+@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
 @ActiveProfiles("simulation")
+@Transactional
 class SimulationIntegrationTest {
 
     @Autowired private WebApplicationContext applicationContext;
 
     @Autowired private SimulatedHardware simulatedHardware;
+
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     private MockMvc mockMvc;
     private HardwareSnapshot originalState;
@@ -42,6 +48,7 @@ class SimulationIntegrationTest {
                 MockMvcBuilders.webAppContextSetup(applicationContext)
                         .apply(springSecurity())
                         .build();
+        MachineTestState.reset(jdbcTemplate);
         originalState = simulatedHardware.snapshot();
     }
 

@@ -10,6 +10,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import rs.unit.backend.deposit.domain.BanknotePolicy.Outcome;
+import rs.unit.backend.machine.infrastructure.persistence.MachineOperationLock;
 
 @Repository
 public class DepositRepository {
@@ -21,19 +22,36 @@ public class DepositRepository {
     }
 
     public void lockMachine() {
-        Short machineId =
+        MachineOperationLock.acquire(jdbc);
+    }
+
+    public boolean hasUnfinishedCollection() {
+        Boolean unfinished =
                 jdbc.queryForObject(
                         """
-                        SELECT id
-                        FROM cash_machine.machine_configuration
-                        WHERE id = 1
-                        FOR UPDATE
+                        SELECT EXISTS (
+                            SELECT 1
+                            FROM cash_machine.cash_collection
+                            WHERE step <> 'COMPLETED'
+                        )
                         """,
-                        Short.class);
+                        Boolean.class);
 
-        if (machineId == null) {
-            throw new IllegalStateException("Machine configuration is missing.");
-        }
+        return Boolean.TRUE.equals(unfinished);
+    }
+
+    public void closeDepositsOfUnavailableAccounts(Instant now) {
+        jdbc.update(
+                """
+                UPDATE cash_machine.deposit deposit
+                SET status = 'INTERRUPTED',
+                    finished_at = ?
+                FROM cash_machine.user_account account
+                WHERE deposit.user_id = account.id
+                    AND deposit.status = 'ACTIVE'
+                    AND (account.active = FALSE OR account.role <> 'CASHIER')
+                """,
+                timestamp(now));
     }
 
     public void closeUnavailableDeposits(UUID runtimeId, Instant now) {
@@ -92,9 +110,18 @@ public class DepositRepository {
                     runtime_id,
                     status,
                     started_at,
-                    expires_at
+                    expires_at,
+                    cash_cycle_id
                 )
-                VALUES (?, 1, ?, ?, ?, 'ACTIVE', ?, ?)
+                VALUES (
+                    ?, 1, ?, ?, ?, 'ACTIVE', ?, ?,
+                    (
+                        SELECT id
+                        FROM cash_machine.cash_cycle
+                        WHERE machine_id = 1
+                            AND closed_at IS NULL
+                    )
+                )
                 """,
                 depositId,
                 userId,

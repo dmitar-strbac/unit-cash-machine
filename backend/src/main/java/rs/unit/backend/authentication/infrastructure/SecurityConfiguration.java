@@ -9,12 +9,15 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.logout.LogoutFilter;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
+import rs.unit.backend.collection.application.CollectionService;
+import rs.unit.backend.collection.infrastructure.CollectionLogoutFilter;
 import rs.unit.backend.deposit.infrastructure.DepositLogoutHandler;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
@@ -44,7 +47,8 @@ public class SecurityConfiguration {
             CsrfTokenRepository csrfRepository,
             Clock clock,
             UserAccountRepository userRepository,
-            DepositLogoutHandler depositLogoutHandler)
+            DepositLogoutHandler depositLogoutHandler,
+            CollectionService collectionService)
             throws Exception {
 
         http.formLogin(AbstractHttpConfigurer::disable)
@@ -81,6 +85,8 @@ public class SecurityConfiguration {
                                         .requestMatchers(
                                                 HttpMethod.POST, "/api/deposits/current/banknotes")
                                         .hasRole("CASHIER")
+                                        .requestMatchers("/api/collections/**")
+                                        .hasRole("CIT")
                                         .anyRequest()
                                         .denyAll())
                 .exceptionHandling(
@@ -122,6 +128,8 @@ public class SecurityConfiguration {
         http.addFilterAfter(
                 new SessionValidityFilter(clock, userRepository),
                 SecurityContextHolderFilter.class);
+
+        http.addFilterBefore(new CollectionLogoutFilter(collectionService), LogoutFilter.class);
 
         return http.build();
     }

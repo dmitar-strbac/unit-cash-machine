@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { guestGuard, sessionGuard } from './core/auth/auth.guards';
+import { citGuard, guestGuard, sessionGuard } from './core/auth/auth.guards';
 
 export const routes: Routes = [
   {
@@ -40,6 +40,13 @@ export const routes: Routes = [
     canActivate: [guestGuard],
     data: { role: 'CIT' },
     loadComponent: () => import('./features/auth/login-page').then((m) => m.LoginPage),
+  },
+  {
+    path: 'cit',
+    title: 'Unit — CIT collection',
+    canActivate: [citGuard],
+    loadComponent: () =>
+      import('./features/collection/collection-page').then((m) => m.CollectionPage),
   },
   {
     path: 'session',

@@ -41,6 +41,13 @@ public class DepositService {
 
         repository.closeUnavailableDeposits(runtimeId, now);
 
+        repository.closeDepositsOfUnavailableAccounts(now);
+
+        if (repository.hasUnfinishedCollection()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Complete the cash collection before starting a deposit.");
+        }
+
         if (repository.hasActiveDeposit()) {
             throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "Another deposit is already active on this machine.");
@@ -87,6 +94,11 @@ public class DepositService {
         }
 
         requireActiveDeposit(deposit);
+
+        if (repository.hasUnfinishedCollection()) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT, "Banknote acceptance is blocked during cash collection.");
+        }
 
         var snapshot = hardware.snapshot();
 
@@ -147,6 +159,7 @@ public class DepositService {
         boolean acceptingEnabled =
                 "ACTIVE".equals(deposit.status())
                         && now.isBefore(deposit.expiresAt())
+                        && !repository.hasUnfinishedCollection()
                         && MachineReadinessPolicy.isDepositHardwareReady(hardware.snapshot());
 
         return new DepositView(
@@ -159,6 +172,18 @@ public class DepositService {
                 deposit.expiresAt(),
                 deposit.finishedAt(),
                 acceptingEnabled);
+    }
+
+    @Transactional
+    public boolean prepareForCollection() {
+        repository.lockMachine();
+
+        Instant now = clock.instant();
+
+        repository.closeUnavailableDeposits(runtimeId, now);
+        repository.closeDepositsOfUnavailableAccounts(now);
+
+        return !repository.hasActiveDeposit();
     }
 
     private static void requireCashier(AuthenticatedUser user) {

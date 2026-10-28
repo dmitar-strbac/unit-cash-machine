@@ -26,11 +26,15 @@ export class App {
     { initialValue: this.router.url },
   );
 
+  protected readonly sessionTarget = computed(() =>
+    this.auth.user()?.role === 'CIT' ? '/cit' : '/session',
+  );
+
   protected readonly backTarget = computed(() => {
     const url = this.currentUrl();
     const path = url.split(/[?#]/)[0];
 
-    if (path === '/' || path === '/session') {
+    if (path === '/' || path === '/session' || path === '/cit') {
       return null;
     }
 
@@ -45,7 +49,7 @@ export class App {
     }
 
     if (path === '/info' || path === '/diagnostics') {
-      return this.auth.user() ? '/session' : '/';
+      return this.auth.user() ? this.sessionTarget() : '/';
     }
 
     return '/';
