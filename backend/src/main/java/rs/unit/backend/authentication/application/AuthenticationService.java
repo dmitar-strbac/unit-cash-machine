@@ -8,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import rs.unit.backend.deposit.application.DepositService;
 import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
@@ -19,6 +20,7 @@ public class AuthenticationService {
 
     private final UserAccountRepository repository;
     private final PinService pinService;
+    private final DepositService depositService;
     private final LoginAttemptLimiter attemptLimiter;
     private final Clock clock;
 
@@ -27,16 +29,18 @@ public class AuthenticationService {
     public AuthenticationService(
             UserAccountRepository repository,
             PinService pinService,
+            DepositService depositService,
             LoginAttemptLimiter attemptLimiter,
             Clock clock) {
         this.repository = repository;
         this.pinService = pinService;
+        this.depositService = depositService;
         this.attemptLimiter = attemptLimiter;
         this.clock = clock;
         this.dummyPinHash = pinService.encode("000000000000");
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public AuthenticatedUser login(UUID userId, UserRole requestedRole, String pin) {
         attemptLimiter.acquire();
 
@@ -53,7 +57,13 @@ public class AuthenticationService {
             throw invalidCredentials();
         }
 
-        return authenticatedUser(account);
+        AuthenticatedUser user = authenticatedUser(account);
+
+        if (user.role() == UserRole.CASHIER) {
+            depositService.start(user);
+        }
+
+        return user;
     }
 
     @Transactional(readOnly = true)

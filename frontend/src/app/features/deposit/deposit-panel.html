@@ -1,0 +1,85 @@
+<section class="deposit-panel" aria-label="Current deposit">
+  <p class="instruction">Please insert your notes</p>
+
+  <div class="deposit-total" aria-live="polite" aria-atomic="true">
+    <span>Current deposit:</span>
+
+    @if (deposits.deposit(); as deposit) {
+      <strong>{{ deposit.totalCents / 100 | number: '1.2-2' }} EUR</strong>
+    } @else {
+      <strong>Loading…</strong>
+    }
+  </div>
+
+  <p class="acceptor-status" role="status">
+    <span class="acceptor-light" [class.enabled]="accepting()" aria-hidden="true"></span>
+
+    {{
+      deposits.busy()
+        ? 'Processing banknote…'
+        : accepting()
+          ? 'Ready for banknotes'
+          : 'Acceptance paused'
+    }}
+  </p>
+
+  @if (deposits.loadError()) {
+    <p class="deposit-error" role="alert">{{ deposits.loadError() }}</p>
+  }
+
+  @if (deposits.notice()) {
+    <p class="deposit-notice" role="status">{{ deposits.notice() }}</p>
+  }
+
+  @if (deposits.pending()) {
+    <button
+      class="machine-button check-button"
+      [disabled]="deposits.busy() || ending()"
+      (click)="retry()"
+    >
+      CHECK LAST BANKNOTE
+    </button>
+
+    <p class="pending-help">
+      Confirm the last operation before inserting another note or signing out.
+    </p>
+  }
+
+  <details class="simulation-controls">
+    <summary>Banknote simulator</summary>
+
+    <div class="simulation-fields">
+      <label>
+        Currency
+
+        <select
+          [value]="currency()"
+          [disabled]="deposits.busy() || !!deposits.pending() || ending()"
+          (change)="selectCurrency($event)"
+        >
+          @for (item of currencies; track item) {
+            <option [value]="item">{{ item }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Denomination
+
+        <select
+          [value]="denomination()"
+          [disabled]="deposits.busy() || !!deposits.pending() || ending()"
+          (change)="selectDenomination($event)"
+        >
+          @for (item of denominations; track item) {
+            <option [value]="item">{{ item }}</option>
+          }
+        </select>
+      </label>
+
+      <button class="machine-button insert-button" [disabled]="!accepting()" (click)="insert()">
+        INSERT ONE NOTE
+      </button>
+    </div>
+  </details>
+</section>

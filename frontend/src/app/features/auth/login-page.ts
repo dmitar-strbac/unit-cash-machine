@@ -154,7 +154,22 @@ export class LoginPage {
         },
         error: (error: unknown) => {
           if (error instanceof HttpErrorResponse && error.status === 409) {
-            void this.router.navigateByUrl('/session', { replaceUrl: true });
+            this.auth
+              .refresh()
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
+                next: (user) => {
+                  if (user) {
+                    void this.router.navigateByUrl('/session', { replaceUrl: true });
+                  } else {
+                    this.error.set('Another deposit is active. Finish it before signing in.');
+                  }
+                },
+                error: () => {
+                  this.error.set('Unable to verify the session. Please try again.');
+                },
+              });
+
             return;
           }
 

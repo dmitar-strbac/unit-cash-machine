@@ -1,0 +1,109 @@
+:host {
+  display: block;
+}
+
+.deposit-panel {
+  padding: 8px 0;
+}
+
+.instruction {
+  margin: 0 0 20px;
+  font-size: clamp(20px, 2.5vw, 28px);
+  font-style: italic;
+}
+
+.deposit-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px 24px;
+  font-size: clamp(24px, 3vw, 34px);
+
+  strong {
+    font-size: clamp(30px, 4vw, 48px);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.acceptor-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0;
+  color: var(--muted);
+}
+
+.acceptor-light {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #7d878d;
+
+  &.enabled {
+    background: var(--success);
+    box-shadow: 0 0 10px #88d60066;
+  }
+}
+
+.deposit-error {
+  color: #a51e37;
+}
+
+.deposit-notice,
+.pending-help {
+  line-height: 1.5;
+}
+
+.pending-help {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.check-button {
+  min-height: 48px;
+  padding: 12px 20px;
+}
+
+.simulation-controls {
+  margin-top: 28px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+
+  summary {
+    width: fit-content;
+    padding: 6px 0;
+    cursor: pointer;
+    color: var(--muted);
+  }
+}
+
+.simulation-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 14px;
+  padding-top: 14px;
+
+  label {
+    display: grid;
+    gap: 6px;
+    font-size: 14px;
+  }
+
+  select {
+    min-width: 110px;
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: white;
+    color: var(--text);
+    font: inherit;
+  }
+}
+
+.insert-button {
+  min-height: 44px;
+  padding: 10px 18px;
+}
