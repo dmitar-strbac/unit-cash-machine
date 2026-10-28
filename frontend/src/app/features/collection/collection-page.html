@@ -1,0 +1,149 @@
+<section class="collection-page" aria-label="CIT collection">
+  <div class="collection-stage">
+    @if (collection(); as view) {
+      <h1 aria-live="polite">{{ titles[view.step] }}</h1>
+
+      @if (view.step === 'SECURING' || view.step === 'INCOMPLETE' || view.step === 'COMPLETED') {
+        <div class="gate-checks" aria-label="Gate status">
+          <label>
+            <input type="checkbox" [checked]="view.doorClosed" disabled />
+            Door closed
+          </label>
+
+          @if (view.step !== 'SECURING') {
+            <label>
+              <input type="checkbox" [checked]="view.doorLocked" disabled />
+              Door locked
+            </label>
+          }
+        </div>
+      }
+
+      @if (nextVisible()) {
+        <button
+          class="machine-button primary-action"
+          [disabled]="!controlsEnabled()"
+          (click)="next()"
+        >
+          {{ busy() ? 'PLEASE WAIT…' : 'NEXT' }}
+        </button>
+      }
+
+      @if (view.step === 'SECURING') {
+        <p class="help">Turn the lock to secure the door.</p>
+      }
+
+      @if (view.step === 'INCOMPLETE') {
+        <button
+          class="machine-button primary-action"
+          [disabled]="!controlsEnabled()"
+          (click)="restart()"
+        >
+          {{ restarting() ? 'PLEASE WAIT…' : 'RESTART' }}
+        </button>
+
+        <p class="help">{{ recoveryMessage() }}</p>
+      }
+
+      @if (view.step === 'COMPLETED') {
+        @if (closing()) {
+          <p class="help" role="status">Ending CIT session…</p>
+        }
+
+        @if (sessionClosed()) {
+          <p class="help" role="status">Returning to the main menu…</p>
+        }
+
+        @if (closeError()) {
+          <p class="error" role="alert">{{ closeError() }}</p>
+
+          <button
+            class="machine-button secondary-action"
+            [disabled]="closing()"
+            (click)="retrySessionClose()"
+          >
+            RETRY
+          </button>
+        }
+      }
+    } @else {
+      <h1>Loading CIT…</h1>
+    }
+
+    @if (loadError()) {
+      <p class="error" role="alert">{{ loadError() }}</p>
+    }
+
+    @if (actionError()) {
+      <p class="error" role="alert">{{ actionError() }}</p>
+    }
+
+    @if (pending()) {
+      <button
+        class="machine-button secondary-action"
+        [disabled]="busy() || restarting()"
+        (click)="retry()"
+      >
+        CHECK LAST ACTION
+      </button>
+    }
+  </div>
+
+  @if (collection(); as view) {
+    @if (view.step !== 'COMPLETED') {
+      <details class="simulation-controls">
+        <summary>Machine simulator</summary>
+
+        <p>Optional physical actions. NEXT confirms cassette handling manually.</p>
+
+        <div class="simulation-actions">
+          @if (view.step === 'OPEN_DOOR') {
+            <button
+              class="machine-button"
+              [disabled]="!controlsEnabled()"
+              (click)="simulate('OPEN_DOOR')"
+            >
+              OPEN DOOR
+            </button>
+          }
+
+          @if (cassetteControls()) {
+            <button
+              class="machine-button"
+              [disabled]="!controlsEnabled()"
+              (click)="simulate('REMOVE_CASSETTE')"
+            >
+              REMOVE CASSETTE
+            </button>
+
+            <button
+              class="machine-button"
+              [disabled]="!controlsEnabled()"
+              (click)="simulate('INSERT_CASSETTE')"
+            >
+              INSERT CASSETTE
+            </button>
+          }
+
+          @if (gateControls()) {
+            <button
+              class="machine-button"
+              [disabled]="!controlsEnabled() || view.doorClosed"
+              (click)="simulate('CLOSE_DOOR')"
+            >
+              CLOSE DOOR
+            </button>
+
+            <button
+              class="machine-button"
+              [disabled]="!controlsEnabled() || !view.doorClosed || view.doorLocked"
+              (click)="simulate('LOCK_DOOR')"
+            >
+              TURN LOCK
+            </button>
+          }
+        </div>
+      </details>
+    }
+  }
+</section>

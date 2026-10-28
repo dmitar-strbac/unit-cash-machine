@@ -217,7 +217,12 @@ public class CollectionService {
 
         StoredCollection collection = repository.findUnfinished().orElse(null);
 
-        if (collection == null || collection.step() == CollectionStep.INCOMPLETE) {
+        if (collection == null) {
+            return;
+        }
+
+        if (collection.step() == CollectionStep.INCOMPLETE) {
+            completeAfterLateLock(collection);
             return;
         }
 
@@ -285,10 +290,10 @@ public class CollectionService {
             case SECURING -> {
                 if (snapshot.door() != DoorState.CLOSED) {
                     incomplete(collection, "DOOR_REOPENED", now, snapshot);
-                } else if (!now.isBefore(collection.securingDeadline())) {
-                    incomplete(collection, "LOCK_TIMEOUT", now, snapshot);
                 } else if (snapshot.lock() == LockState.LOCKED) {
                     complete(collection, now, snapshot);
+                } else if (!now.isBefore(collection.securingDeadline())) {
+                    incomplete(collection, "LOCK_TIMEOUT", now, snapshot);
                 }
             }
 
@@ -305,6 +310,34 @@ public class CollectionService {
 
         repository.complete(collection, now, total);
         repository.event(collection.id(), collection.operatorId(), "COMPLETED", now, snapshot);
+    }
+
+    private void completeAfterLateLock(StoredCollection collection) {
+        Instant now = clock.instant();
+
+        if (!"LOCK_TIMEOUT".equals(collection.errorCode())
+                || !collection.runtimeId().equals(runtimeId)
+                || !now.isBefore(collection.leaseExpiresAt())) {
+            return;
+        }
+
+        boolean operatorAvailable =
+                users.findById(collection.operatorId())
+                        .filter(account -> account.isActive())
+                        .filter(account -> account.getRole() == UserRole.CIT)
+                        .isPresent();
+
+        if (!operatorAvailable) {
+            return;
+        }
+
+        HardwareSnapshot snapshot = hardware.snapshot();
+
+        if (snapshot.extensionBoard() == ExtensionBoardState.ONLINE
+                && snapshot.door() == DoorState.CLOSED
+                && snapshot.lock() == LockState.LOCKED) {
+            complete(collection, now, snapshot);
+        }
     }
 
     private void incomplete(

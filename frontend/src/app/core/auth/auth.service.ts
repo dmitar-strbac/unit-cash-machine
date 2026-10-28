@@ -75,6 +75,12 @@ export class AuthService {
     );
   }
 
+  clearSession(message = ''): void {
+    this.sessionRevision++;
+    this.currentUser.set(null);
+    this.notice.set(message);
+  }
+
   private postWithCsrf<T>(url: string, body: unknown): Observable<T> {
     return this.csrf.post<T>(url, body);
   }

@@ -644,6 +644,154 @@ class CollectionServiceTest {
                 .complete(any(StoredCollection.class), any(Instant.class), anyLong());
     }
 
+    @Test
+    void lateLockDoesNotCompleteCollectionFromPreviousApplicationRun() {
+        StoredCollection previous =
+                ownership(
+                        record(CollectionStep.INCOMPLETE),
+                        operatorId,
+                        loginId,
+                        UUID.randomUUID(),
+                        cit.expiresAt());
+
+        use(previous, gate(DoorState.CLOSED, LockState.LOCKED));
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+    }
+
+    @Test
+    void lateLockDoesNotCompleteCollectionWithExpiredLease() {
+        StoredCollection expired =
+                ownership(record(CollectionStep.INCOMPLETE), operatorId, loginId, runtimeId, now);
+
+        use(expired, gate(DoorState.CLOSED, LockState.LOCKED));
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+    }
+
+    @Test
+    void lateLockDoesNotCompleteCollectionForMissingOrInactiveOperator() {
+        use(record(CollectionStep.INCOMPLETE), gate(DoorState.CLOSED, LockState.LOCKED));
+
+        when(users.findById(operatorId)).thenReturn(Optional.empty());
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+
+        when(users.findById(operatorId))
+                .thenReturn(
+                        Optional.of(
+                                new UserAccount(
+                                        operatorId,
+                                        "Inactive CIT",
+                                        UserRole.CIT,
+                                        "unused",
+                                        false)));
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+    }
+
+    @Test
+    void lateLockDoesNotCompleteCollectionAfterOperatorRoleChanges() {
+        use(record(CollectionStep.INCOMPLETE), gate(DoorState.CLOSED, LockState.LOCKED));
+
+        when(users.findById(operatorId))
+                .thenReturn(
+                        Optional.of(
+                                new UserAccount(
+                                        operatorId,
+                                        "Changed role",
+                                        UserRole.MANAGEMENT,
+                                        "unused",
+                                        true)));
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+    }
+
+    @Test
+    void lateLockDoesNotCompleteCollectionWhenBoardIsOffline() {
+        use(
+                record(CollectionStep.INCOMPLETE),
+                board(gate(DoorState.CLOSED, LockState.LOCKED), ExtensionBoardState.OFFLINE));
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+    }
+
+    @Test
+    void lateLockDoesNotCompleteCollectionWhileDoorIsOpen() {
+        use(record(CollectionStep.INCOMPLETE), gate(DoorState.OPEN, LockState.LOCKED));
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+    }
+
+    @Test
+    void lateLockDoesNotCompleteCollectionWhileLockRemainsUnlocked() {
+        use(record(CollectionStep.INCOMPLETE), gate(DoorState.CLOSED, LockState.UNLOCKED));
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+    }
+
+    @Test
+    void lateLockDoesNotResolveOtherCollectionFailures() {
+        StoredCollection source = record(CollectionStep.INCOMPLETE);
+
+        StoredCollection hardwareFailure =
+                new StoredCollection(
+                        source.id(),
+                        source.cashCycleId(),
+                        source.operatorId(),
+                        source.loginId(),
+                        source.runtimeId(),
+                        source.leaseExpiresAt(),
+                        source.step(),
+                        source.startedAt(),
+                        source.removalConfirmedAt(),
+                        source.insertionConfirmedAt(),
+                        source.securingDeadline(),
+                        source.finishedAt(),
+                        source.collectedTotalCents(),
+                        "GATE_HARDWARE_UNAVAILABLE");
+
+        use(hardwareFailure, gate(DoorState.CLOSED, LockState.LOCKED));
+
+        service.synchronize();
+
+        assertNoCollectionCompletion();
+    }
+
+    @Test
+    void lateLockCompletesCollectionWithValidSessionAndSecureGate() {
+        StoredCollection collection = record(CollectionStep.INCOMPLETE);
+
+        use(collection, gate(DoorState.CLOSED, LockState.LOCKED));
+
+        when(repository.cycleTotal(cycleId)).thenReturn(2000L);
+
+        service.synchronize();
+
+        verify(repository).complete(collection, now, 2000L);
+    }
+
+    private void assertNoCollectionCompletion() {
+        verify(repository, never())
+                .complete(any(StoredCollection.class), any(Instant.class), anyLong());
+    }
+
     private CollectionService newService(long timeoutMillis) {
         return new CollectionService(repository, deposits, hardware, users, clock, timeoutMillis);
     }

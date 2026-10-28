@@ -12,23 +12,31 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.WebApplicationContext;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfiguration;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfigurationRepository;
+import rs.unit.backend.support.MachineTestState;
 
 @SpringBootTest(properties = "unit.collection.monitor.enabled=false")
+@Transactional
 class MachineStatusIntegrationTest {
 
     @Autowired private WebApplicationContext applicationContext;
 
     @Autowired private MachineConfigurationRepository configurationRepository;
 
+    @Autowired private JdbcTemplate jdbcTemplate;
+
     private MockMvc mockMvc;
 
     @BeforeEach
     void setUp() {
+        MachineTestState.reset(jdbcTemplate);
+
         mockMvc =
                 MockMvcBuilders.webAppContextSetup(applicationContext)
                         .apply(springSecurity())

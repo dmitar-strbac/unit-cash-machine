@@ -4,15 +4,14 @@
 
 ### Cash deposit machine simulator
 
-A local cash deposit machine simulator built with Spring Boot and Angular,
-featuring a touchscreen-inspired interface, simulated hardware and live diagnostics.
+A cash deposit machine simulator built with Spring Boot and Angular, inspired by workflows observed on a physical machine. It combines a touchscreen interface, EUR deposits, guided cash collection and persistent hardware simulation.
 
 ![Java](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge)
 ![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.1.2-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
 ![Angular](https://img.shields.io/badge/Angular-21-DD0031?style=for-the-badge&logo=angular&logoColor=white)
 
-**Simulated hardware · Explicit domain rules · Testable fault scenarios**
+**Real-world workflows · Transactional cash records · Testable failure scenarios**
 
 [Overview](#-overview) ·
 [Architecture](#architecture) ·
@@ -26,52 +25,36 @@ featuring a touchscreen-inspired interface, simulated hardware and live diagnost
 
 ## 🎯 Overview
 
-A cash deposit machine needs to do more than count banknotes. It must know whether its door is secured, its cashbox is available and its hardware is operational—and explain what went wrong when it cannot proceed.
+A cash deposit machine must keep its cash records consistent while users insert banknotes, operators collect money and hardware changes state.
 
-**Unit Cash Machine** is a local simulator inspired by observed workflows on a physical cash deposit machine. The current backend models six hardware components and exposes a consistent view of machine readiness and diagnostics.
+**Unit Cash Machine** models these workflows locally: cashiers deposit EUR banknotes, CIT operators complete a guided collection procedure, and diagnostics explain when the machine cannot accept deposits.
 
-The project is developed incrementally. Hardware simulation, diagnostics,
-PIN-based authentication and EUR deposits are implemented. Cash collection,
-reporting, maintenance commands and extended recovery scenarios are planned.
+Authentication, deposits and cash collection are implemented. Reports, virtual printing, maintenance commands and extended recovery testing are next.
 
 ## ✨ Features
 
 | Area | Description | Status |
 | :--- | :--- | :--- |
+| 🔌 Hardware simulation | Persistent component states, fault injection and simulated physical actions | Available |
 | 🖥️ Machine interface | Touchscreen-inspired navigation, machine information and live diagnostics | Available |
-| 🔌 Hardware simulation | Six modeled components, readiness rules and API-based fault injection | Available |
 | 🚦 Diagnostics | Component alerts, severity indicators and connection-loss feedback | Available |
 | 🔐 Authentication | Profile selection, PIN login and role-based access | Available |
-| 💶 Deposits | EUR banknote acceptance and persistent deposit records | Available |
-| 🚚 Cash collection | CIT workflow and cashbox replacement | Planned |
-| 🧾 Reporting | Daily, per-user and device totals with simulated printing | Planned |
+| 💶 Deposits | Immediate banknote persistence, server-calculated totals and safe request retries | Available |
+| 🚚 Cash collection | Guided CIT workflow, door and lock monitoring, and cash-cycle rollover | Available |
+| 🧾 Reporting | Device, daily and per-user reports with virtual printing | Planned |
 | 🛠️ Maintenance | Diagnostics commands and simulated device lifecycle operations | Planned |
-
-### Six components, one consistent snapshot
-
-| Component | Modeled states |
-| :--- | :--- |
-| Banknote acceptor | `READY` · `ACCEPTING` · `JAMMED` · `OFFLINE` · `UNKNOWN` |
-| Cashbox | `PRESENT` · `FULL` · `ABSENT` · `UNKNOWN` |
-| Door | `CLOSED` · `OPEN` · `UNKNOWN` |
-| Electronic lock | `LOCKED` · `UNLOCKED` · `FAULT` · `UNKNOWN` |
-| Extension board | `ONLINE` · `OFFLINE` · `UNKNOWN` |
-| Printer | `READY` · `OUT_OF_PAPER` · `OFFLINE` · `FAULT` · `UNKNOWN` |
 
 ## 🧠 Engineering decisions
 
-- **Hardware behind an interface.** The application reads hardware through `HardwareStatusPort`, keeping status retrieval separate from the simulator implementation.
-- **One snapshot per status request.** Readiness and diagnostics use the same immutable hardware snapshot.
-- **Domain rules outside controllers.** Readiness and alert policies can be tested without starting Spring or connecting to a database.
-- **Atomic state replacement.** The simulator replaces the complete snapshot without exposing a partially updated state.
-- **Versioned database schema.** Flyway applies migrations; Hibernate validates the resulting schema.
-- **Behavior-focused tests.** Tests cover readiness rules, authentication, deposit validation, duplicate requests and selected failure and recovery paths. Extended concurrency and interruption testing is planned.
-- **Role-specific simulation controls.** Hardware changes require the `simulation` profile, `MAINTENANCE` access and CSRF protection. Simulated banknote insertion requires the `simulation` profile, `CASHIER` access and CSRF protection.
-- **Immediate banknote persistence.** Each accepted banknote is recorded in its own request transaction; logout completes the deposit without being responsible for saving previously accepted money.
-- **Duplicate-request protection.** Each banknote operation has a unique identifier. Repeating the same operation returns its recorded outcome without counting it again; reusing the identifier with different contents is rejected.
-- **One active deposit per machine.** Transactional row locking and a database constraint prevent multiple active deposits.
-- **Server-authoritative totals.** Deposit totals are calculated from accepted banknote records and displayed by the frontend.
-- **Unconfirmed-operation handling.** The frontend preserves a pending operation in session storage and retries it with the same identifier after an uncertain response.
+## 🧠 Engineering decisions
+
+- **Hardware ports.** Application services depend on hardware interfaces, separating workflow rules from the simulator implementation.
+- **Transactional machine access.** Deposits, collection and hardware changes share a database row lock. Database constraints additionally enforce active-operation rules.
+- **Immediate cash records.** Accepted banknotes are persisted before the request completes; logout only closes the deposit.
+- **Idempotent operations.** Banknote identifiers prevent duplicate counting, while repeated CIT confirmations preserve the recorded result.
+- **Persistent collection workflow.** CIT progress and events survive application restarts. Manual cassette confirmations remain separate from sensor readings, matching the observed machine.
+- **Separate cash cycles and daily history.** Successful collection closes the current cash cycle once, resetting the device total while preserving deposit history for daily reporting.
+- **Explicit recovery behavior.** The frontend retries uncertain banknote requests with the original identifier. Delayed door locking completes CIT automatically; other interruptions require recovery according to their cause.
 
 <a id="architecture"></a>
 ## 🏗️ Architecture
@@ -87,7 +70,7 @@ flowchart TD
     Domain["Application services and domain rules"]
     Database[("PostgreSQL")]
     Hardware["Hardware ports"]
-    Simulator["In-memory hardware simulator"]
+    Simulator["Persistent hardware simulator"]
     Controls["Simulation API client"]
 
     UI --> API
@@ -98,18 +81,11 @@ flowchart TD
     Controls -->|"simulation profile"| API
 ```
 
-Persistent application data is stored in PostgreSQL, with schema changes
-managed by Flyway. Simulated hardware state is held in memory and resets
-when the backend restarts.
+PostgreSQL stores machine configuration, user accounts, hardware state, deposits, cash cycles and collection events. Flyway manages the schema, and Hibernate validates JPA mappings.
 
-User accounts and machine configuration use Spring Data JPA. Deposit records
-and banknote operations use a dedicated JDBC repository with explicit SQL
-and transactional locking.
+User accounts and configuration use Spring Data JPA. Cash workflows and hardware state use Spring JDBC with explicit SQL and transactional locking.
 
-Authenticated HTTP sessions are not restored after a backend restart.
-Deposit records remain in PostgreSQL. When the next cashier deposit starts,
-the application closes stale active deposits as `EXPIRED` or `INTERRUPTED`.
-This reconciliation runs on the next cashier login, not as a background task.
+HTTP sessions are not restored after a backend restart. Cash records and CIT progress remain available, and interrupted operations are reconciled before normal processing resumes.
 
 ## 🚦 Readiness and diagnostics
 
@@ -121,6 +97,17 @@ This reconciliation runs on the next cashier login, not as a background task.
 | **Is the machine secure?** | Door is closed and lock is locked |
 | **Is deposit hardware ready?** | Machine is secure, acceptor is ready, cashbox is present and extension board is online |
 | **Is printing available?** | Printer is ready |
+
+### Six components, one consistent snapshot
+
+| Component | Modeled states |
+| :--- | :--- |
+| Banknote acceptor | `READY` · `ACCEPTING` · `JAMMED` · `OFFLINE` · `UNKNOWN` |
+| Cashbox | `PRESENT` · `FULL` · `ABSENT` · `UNKNOWN` |
+| Door | `CLOSED` · `OPEN` · `UNKNOWN` |
+| Electronic lock | `LOCKED` · `UNLOCKED` · `FAULT` · `UNKNOWN` |
+| Extension board | `ONLINE` · `OFFLINE` · `UNKNOWN` |
+| Printer | `READY` · `OUT_OF_PAPER` · `OFFLINE` · `FAULT` · `UNKNOWN` |
 
 </details>
 
@@ -142,6 +129,7 @@ flowchart TD
 - An open door produces an amber warning and blocks deposits.
 - A jammed acceptor produces a red error and blocks deposits.
 - An acceptor in `ACCEPTING` is busy, not faulty: it produces no alert but is not ready for a new deposit.
+- An unfinished CIT procedure blocks deposits. A delayed lock produces a warning and completes automatically once the door is closed and locked; interruptions requiring recovery produce an error.
 
 ## ⚙️ Technology stack
 
@@ -150,10 +138,9 @@ flowchart TD
 | Backend | Java 21, Spring Boot 4.1.2, Spring MVC |
 | Frontend | Angular 21, TypeScript, SCSS, standalone components |
 | Validation | Jakarta Bean Validation, Problem Details responses |
-| Persistence | Spring Data JPA, Hibernate, PostgreSQL 17 |
+| Persistence | Spring Data JPA, Hibernate, Spring JDBC (`JdbcTemplate`), PostgreSQL 17 |
 | Migrations | Flyway |
 | Security | Spring Security, BCrypt PIN hashing, server-side sessions, CSRF protection |
-| Persistence | Spring Data JPA, Hibernate, Spring JDBC (`JdbcTemplate`), PostgreSQL 17 |
 | Testing | JUnit, Mockito, Spring Boot Test, MockMvc |
 | Frontend testing | Vitest, Angular TestBed |
 | Formatting | Spotless, google-java-format with AOSP style, Prettier |
@@ -229,9 +216,7 @@ Use these variables when connecting to a different local database. The database 
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=simulation,demo"
 ```
 
-The `simulation` profile enables hardware state changes and simulated
-banknote insertion through the API.
-The `demo` profile creates missing demo accounts for local testing.
+The `simulation` profile enables hardware fault injection, banknote insertion and CIT physical-action controls. The `demo` profile creates missing demo accounts for local testing.
 
 | Role | Account | PIN |
 | :--- | :--- | :--- |
@@ -247,13 +232,13 @@ Sessions expire 15 minutes after login. Refreshing the page preserves a valid se
 
 The backend listens on **`http://127.0.0.1:8080`**.
 
-To run without hardware mutation and banknote insertion simulation endpoints:
+To run without simulation endpoints:
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-Both modes use simulated hardware. The profile controls whether its state can be changed through the API.
+Both modes use simulated hardware. CIT authentication still performs the workflow's electronic unlock; the `simulation` profile enables API controls for physical actions and fault injection.
 
 ### 5. Check application health
 
@@ -291,6 +276,13 @@ The Angular development server proxies `/api/**` requests to
 | `POST` | `/api/auth/logout` | Complete the cashier deposit, if applicable, and end the current session |
 | `GET` | `/api/deposits/current` | Current deposit and acceptance availability; requires `CASHIER` access |
 | `POST` | `/api/deposits/current/banknotes` | Simulate one banknote; requires `simulation`, `CASHIER` access and CSRF |
+| `GET` | `/api/collections/current` | Current CIT procedure and door/lock status |
+| `POST` | `/api/collections/{id}/confirm-removal` | Confirm cassette removal manually |
+| `POST` | `/api/collections/{id}/confirm-insertion` | Confirm cassette insertion manually |
+| `POST` | `/api/collections/{id}/restart` | Release the incomplete procedure for reauthentication and end the session |
+| `POST` | `/api/collections/{id}/simulate` | Simulate a physical action; requires the `simulation` profile |
+
+Collection endpoints require CIT access. State-changing requests require a valid CSRF token. Logout is rejected while the operator has an unfinished collection.
 
 ### Banknote request
 
@@ -406,7 +398,7 @@ Repeat the request with `printer = 'READY'` to restore printing and clear the wa
 - Without the `simulation` profile, the mutation endpoint is unavailable.
 - Unusual combinations of component states are allowed for fault testing.
 
-The simulation API models snapshots, not physical transitions or a complete cash collection workflow.
+The maintenance simulation endpoint replaces complete hardware snapshots for fault testing. CIT simulation controls model individual physical actions within the collection workflow.
 
 </details>
 
@@ -441,25 +433,15 @@ npm run format
 
 ### What the tests exercise
 
-Tests cover domain rules, application behavior, API validation and frontend
-status feedback. New functionality is developed alongside tests for its
-expected behavior and failure scenarios.
+Backend tests cover readiness and diagnostics, authentication and session validity, deposit ownership, banknote validation, duplicate requests and stale-deposit reconciliation.
 
-Backend tests cover hardware readiness, diagnostics, authentication,
-session validity, deposit ownership, banknote acceptance and rejection,
-duplicate operations, logout completion and stale-deposit reconciliation.
+CIT tests cover workflow transitions, manual confirmations, access restrictions, lock timeouts, delayed-lock completion, cash-cycle rollover and selected hardware and restart scenarios.
 
-Frontend tests cover authentication, status feedback, CSRF-protected
-banknote requests, preservation and retry of unconfirmed operations,
-currency rejection and protection against stale responses overwriting
-newer totals.
+Frontend tests cover authentication, connection feedback, uncertain banknote requests, stale-response protection and CIT interaction and session handling.
 
-Extended tests using concurrent transactions, database failures and
-interrupted sessions remain planned.
+Extended testing of concurrent transactions, database failures and process termination remains planned.
 
-Backend coverage reports are generated with JaCoCo.
-
-JaCoCo excludes only the application bootstrap class from its report. A coverage threshold is not yet enforced by the build.
+JaCoCo generates backend coverage reports and excludes only the application bootstrap class. The build does not currently enforce a coverage threshold.
 
 <a id="roadmap"></a>
 ## 🗺️ Roadmap
@@ -469,12 +451,12 @@ JaCoCo excludes only the application bootstrap class from its report. A coverage
 - [x] Build the Angular machine interface and live status feedback
 - [x] Implement PIN authentication, role-based access and server-side sessions
 - [x] Implement EUR deposits, banknote simulation and duplicate-request protection
-- [ ] Implement CIT collection and cashbox replacement
+- [x] Implement CIT collection, persistent workflow state and cash-cycle rollover
 - [ ] Implement device and daily reports with virtual printing
 - [ ] Implement maintenance commands and device lifecycle simulation
-- [ ] Add frontend controls for hardware fault simulation
-- [ ] Extend audit history and test concurrency, interruptions and recovery
-- [ ] Isolate integration test databases and add continuous integration
+- [ ] Add maintenance UI controls for hardware fault injection
+- [ ] Test concurrent requests, database failures and process interruption
+- [ ] Introduce dedicated integration test databases and continuous integration
 
 <details>
 <summary><strong>Observed workflow requirements</strong></summary>
@@ -486,7 +468,8 @@ JaCoCo excludes only the application bootstrap class from its report. A coverage
 - Logging out preserves the deposit without automatically printing a receipt.
 - Daily totals start at midnight in `Europe/Belgrade`.
 - Per-user daily reports require selecting a user.
-- Confirmed cashbox replacement resets the device total while preserving daily totals.
+- Successful CIT completion resets the device total while preserving daily history.
+- Cassette replacement uses manual confirmations; delayed locking completes CIT without requiring a restart.
 
 Authentication and deposit rules are implemented. Reporting and cashbox
 replacement requirements guide the upcoming workflows.
@@ -497,7 +480,7 @@ replacement requirements guide the upcoming workflows.
 
 This is an independent educational and portfolio project based on observed machine behavior.
 
-It does not connect to real hardware, implement a vendor protocol or process real money. The backend implements authentication and authorization and is configured for local use on the loopback interface.
+Authentication, deposit and CIT workflows are implemented. Reporting requirements guide the next development phase.
 
 ## 📄 License
 

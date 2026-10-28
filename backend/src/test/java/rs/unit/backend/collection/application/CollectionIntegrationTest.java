@@ -185,7 +185,7 @@ class CollectionIntegrationTest {
     }
 
     @Test
-    void requiresReauthenticationAfterLockTimeout() {
+    void completesAutomaticallyWhenDoorIsLockedAfterTimeout() {
         AuthenticatedUser cit = authentication.loginCit("5678");
         UUID id = reachCloseDoor(cit);
 
@@ -193,18 +193,40 @@ class CollectionIntegrationTest {
         collections.synchronize();
 
         when(clock.instant()).thenReturn(now.plusSeconds(5));
-
         collections.synchronize();
 
         CollectionView incomplete = collections.current(cit);
 
         assertEquals(CollectionStep.INCOMPLETE, incomplete.step());
         assertEquals("LOCK_TIMEOUT", incomplete.errorCode());
+        assertTrue(incomplete.doorClosed());
+
+        when(clock.instant()).thenReturn(now.plusSeconds(120));
+        collections.synchronize();
+
+        assertEquals(CollectionStep.INCOMPLETE, collections.current(cit).step());
 
         collections.simulate(cit, id, PhysicalAction.LOCK_DOOR);
         collections.synchronize();
 
-        assertEquals(CollectionStep.INCOMPLETE, collections.current(cit).step());
+        CollectionView completed = collections.current(cit);
+
+        assertEquals(CollectionStep.COMPLETED, completed.step());
+        assertTrue(completed.doorClosed());
+        assertTrue(completed.doorLocked());
+        assertEquals(id, completed.id());
+    }
+
+    @Test
+    void restartRemainsOptionalAfterLockTimeout() {
+        AuthenticatedUser cit = authentication.loginCit("5678");
+        UUID id = reachCloseDoor(cit);
+
+        collections.simulate(cit, id, PhysicalAction.CLOSE_DOOR);
+        collections.synchronize();
+
+        when(clock.instant()).thenReturn(now.plusSeconds(5));
+        collections.synchronize();
 
         collections.restart(cit, id);
 
@@ -212,6 +234,7 @@ class CollectionIntegrationTest {
 
         assertEquals(id, collections.current(resumed).id());
 
+        collections.simulate(resumed, id, PhysicalAction.LOCK_DOOR);
         collections.synchronize();
 
         assertEquals(CollectionStep.COMPLETED, collections.current(resumed).step());

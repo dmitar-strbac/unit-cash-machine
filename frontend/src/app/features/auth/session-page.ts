@@ -31,10 +31,6 @@ import { DepositPanel } from '../deposit/deposit-panel';
               <button class="machine-button menu-button" disabled>COMPONENT INFO</button>
             </div>
           }
-
-          @case ('CIT') {
-            <p class="cit-message">CIT access authorized.</p>
-          }
         }
 
         <div class="logout-area">
@@ -78,12 +74,6 @@ import { DepositPanel } from '../deposit/deposit-panel';
       min-height: 110px;
       padding: 16px;
       font-size: clamp(18px, 2.5vw, 28px);
-    }
-
-    .cit-message {
-      margin: 24px 0;
-      text-align: center;
-      font-size: 26px;
     }
 
     .logout-area {

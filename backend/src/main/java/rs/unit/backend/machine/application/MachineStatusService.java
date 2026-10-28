@@ -53,15 +53,20 @@ public class MachineStatusService {
                 .ifPresent(
                         collection -> {
                             boolean incomplete = collection.step() == CollectionStep.INCOMPLETE;
+                            boolean waitingForLock =
+                                    incomplete && "LOCK_TIMEOUT".equals(collection.errorCode());
+                            boolean requiresRecovery = incomplete && !waitingForLock;
 
                             alerts.add(
                                     new MachineAlert(
-                                            incomplete ? "CIT_INCOMPLETE" : "CIT_IN_PROGRESS",
+                                            requiresRecovery ? "CIT_INCOMPLETE" : "CIT_IN_PROGRESS",
                                             Component.LOCK,
-                                            incomplete ? Severity.ERROR : Severity.WARNING,
-                                            incomplete
+                                            requiresRecovery ? Severity.ERROR : Severity.WARNING,
+                                            requiresRecovery
                                                     ? "Cash collection requires recovery."
-                                                    : "Cash collection is in progress.",
+                                                    : waitingForLock
+                                                            ? "Close and lock the door to complete cash collection."
+                                                            : "Cash collection is in progress.",
                                             true));
                         });
 
