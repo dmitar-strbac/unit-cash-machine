@@ -29,7 +29,7 @@ A cash deposit machine must keep its cash records consistent while users insert 
 
 **Unit Cash Machine** models these workflows locally: cashiers deposit EUR banknotes, CIT operators complete a guided collection procedure, and diagnostics explain when the machine cannot accept deposits.
 
-Authentication, deposits and cash collection are implemented. Reports, virtual printing, maintenance commands and extended recovery testing are next.
+Authentication, EUR deposits, CIT collection and management reports are implemented, including receipt previews, PDF downloads and virtual printing. Maintenance commands and extended recovery testing are next.
 
 ## ✨ Features
 
@@ -38,10 +38,10 @@ Authentication, deposits and cash collection are implemented. Reports, virtual p
 | 🔌 Hardware simulation | Persistent component states, fault injection and simulated physical actions | Available |
 | 🖥️ Machine interface | Touchscreen-inspired navigation, machine information and live diagnostics | Available |
 | 🚦 Diagnostics | Component alerts, severity indicators and connection-loss feedback | Available |
-| 🔐 Authentication | Profile selection, PIN login and role-based access | Available |
+| 🔐 Authentication | PIN login, role-based access and inactivity-based session expiration | Available |
 | 💶 Deposits | Immediate banknote persistence, server-calculated totals and safe request retries | Available |
 | 🚚 Cash collection | Guided CIT workflow, door and lock monitoring, and cash-cycle rollover | Available |
-| 🧾 Reporting | Device, daily and per-user reports with virtual printing | Planned |
+| 🧾 Reporting | Device and daily totals, denomination breakdowns, per-user summaries and PDF receipts | Available |
 | 🛠️ Maintenance | Diagnostics commands and simulated device lifecycle operations | Planned |
 
 
@@ -49,11 +49,11 @@ Authentication, deposits and cash collection are implemented. Reports, virtual p
 
 - **Hardware ports.** Application services depend on hardware interfaces, separating workflow rules from the simulator implementation.
 - **Transactional machine access.** Deposits, collection and hardware changes share a database row lock. Database constraints additionally enforce active-operation rules.
-- **Immediate cash records.** Accepted banknotes are persisted before the request completes; logout only closes the deposit.
-- **Idempotent operations.** Banknote identifiers prevent duplicate counting, while repeated CIT confirmations preserve the recorded result.
+- **Immediate cash records.** Accepted banknotes are persisted before the request completes. Finishing a non-empty deposit creates a saved receipt, even when the printer is unavailable.
+- **Idempotent operations.** Banknote and print request identifiers prevent accidental duplication. Uncertain requests are retried with their original identifiers.
 - **Persistent collection workflow.** CIT progress and events survive application restarts. Manual cassette confirmations remain separate from sensor readings, matching the observed machine.
-- **Separate cash cycles and daily history.** Successful collection closes the current cash cycle once, resetting the device total while preserving deposit history for daily reporting.
-- **Explicit recovery behavior.** The frontend retries uncertain banknote requests with the original identifier. Delayed door locking completes CIT automatically; other interruptions require recovery according to their cause.
+- **Consistent reporting.** Reports use the same machine lock as deposits and collection. Device totals follow cash cycles; daily totals follow banknote acceptance times in the machine's time zone.
+- **Receipts separate from print attempts.** Saved receipt content remains unchanged. Failed prints can be retried without changing cash records, and cashiers can download their receipt after logout through a short-lived access token.
 
 <a id="architecture"></a>
 ## 🏗️ Architecture
@@ -80,7 +80,7 @@ flowchart TD
     Controls -->|"simulation profile"| API
 ```
 
-PostgreSQL stores machine configuration, user accounts, hardware state, deposits, cash cycles and collection events. Flyway manages the schema, and Hibernate validates JPA mappings.
+PostgreSQL stores configuration, accounts, hardware state, cash records, collection events, receipts and print attempts. Flyway manages the schema, and Hibernate validates JPA mappings.
 
 User accounts and configuration use Spring Data JPA. Cash workflows and hardware state use Spring JDBC with explicit SQL and transactional locking.
 
@@ -124,7 +124,7 @@ flowchart TD
 
 **Color and readiness serve different purposes.**
 
-- An offline printer produces an amber warning and disables printing, while deposits remain available.
+- An offline printer produces an amber warning. Deposits remain available, and receipts are saved for later printing.
 - An open door produces an amber warning and blocks deposits.
 - A jammed acceptor produces a red error and blocks deposits.
 - An acceptor in `ACCEPTING` is busy, not faulty: it produces no alert but is not ready for a new deposit.
@@ -143,6 +143,7 @@ flowchart TD
 | Testing | JUnit, Mockito, Spring Boot Test, MockMvc |
 | Frontend testing | Vitest, Angular TestBed |
 | Formatting | Spotless, google-java-format with AOSP style, Prettier |
+| PDF generation | Apache PDFBox |
 | Coverage | JaCoCo |
 | Build | Maven Wrapper, Angular CLI |
 | Local database | Docker Compose |
@@ -227,7 +228,7 @@ The `simulation` profile enables hardware fault injection, banknote insertion an
 Demo accounts remain in the database after the `demo` profile is disabled.
 Existing accounts are not overwritten.
 
-Sessions expire 15 minutes after login. Refreshing the page preserves a valid session.
+Sessions have a 15-minute absolute limit. Cashiers are signed out after 60 seconds of inactivity; management and maintenance after 30 seconds. Screen interaction extends the inactivity deadline; background polling does not. CIT has no additional short inactivity timeout.
 
 The backend listens on **`http://127.0.0.1:8080`**.
 
@@ -262,26 +263,19 @@ The Angular development server proxies `/api/**` requests to
 
 ## 🔌 API demo
 
-| Method | Endpoint | Purpose |
-| :--- | :--- | :--- |
-| `GET` | `/actuator/health` | Application health |
-| `GET` | `/api/machine/status` | Configuration, hardware, readiness and alerts |
-| `GET` | `/api/users?role=CASHIER` | Active profiles for the selected role; CIT profiles are not listed |
-| `GET` | `/api/auth/csrf` | CSRF token for the current session |
-| `POST` | `/api/auth/login` | Profile and PIN authentication |
-| `POST` | `/api/auth/cit-login` | PIN-only CIT authentication |
-| `GET` | `/api/auth/me` | Current authenticated user |
-| `PUT` | `/api/simulation/hardware` | Replace hardware state; requires `simulation`, `MAINTENANCE` access and CSRF |
-| `POST` | `/api/auth/logout` | Complete the cashier deposit, if applicable, and end the current session |
-| `GET` | `/api/deposits/current` | Current deposit and acceptance availability; requires `CASHIER` access |
-| `POST` | `/api/deposits/current/banknotes` | Simulate one banknote; requires `simulation`, `CASHIER` access and CSRF |
-| `GET` | `/api/collections/current` | Current CIT procedure and door/lock status |
-| `POST` | `/api/collections/{id}/confirm-removal` | Confirm cassette removal manually |
-| `POST` | `/api/collections/{id}/confirm-insertion` | Confirm cassette insertion manually |
-| `POST` | `/api/collections/{id}/restart` | Release the incomplete procedure for reauthentication and end the session |
-| `POST` | `/api/collections/{id}/simulate` | Simulate a physical action; requires the `simulation` profile |
+| Area | Main endpoints |
+| :--- | :--- |
+| Health and status | `GET /actuator/health`, `GET /api/machine/status` |
+| Authentication | `/api/auth/login`, `/cit-login`, `/me`, `/csrf`, `/activity`, `/logout` |
+| User selection | `GET /api/users?role=CASHIER` |
+| Deposits | `GET /api/deposits/current`, `POST /api/deposits/current/banknotes` |
+| CIT collection | `/api/collections/current`, `/{id}/confirm-removal`, `/{id}/confirm-insertion`, `/{id}/restart`, `/{id}/simulate` |
+| Reports | `GET /api/reports`, `GET /api/reports/{type}`, `POST /api/reports/{type}/print` |
+| Saved receipts | `GET /api/receipts`, `GET /api/receipts/{id}/pdf`, `POST /api/receipts/{id}/print` |
+| Cashier receipt access | `POST /api/deposits/current/receipt-access`, `GET /api/receipt-access/pdf` |
+| Hardware simulation | `PUT /api/simulation/hardware` |
 
-Collection endpoints require CIT access. State-changing requests require a valid CSRF token. Logout is rejected while the operator has an unfinished collection.
+Reports and saved receipt management require MANAGEMENT access; collection requires CIT access. Cashier receipt downloads use a short-lived `X-Receipt-Token`. State-changing requests require CSRF protection. Simulation endpoints additionally require the `simulation` profile.
 
 ### Banknote request
 
@@ -365,7 +359,7 @@ Invoke-RestMethod "$baseUrl/api/machine/status" |
     ConvertTo-Json -Depth 6
 ```
 
-Relevant response fields:
+With no unfinished CIT procedure or other active faults, the relevant response fields are:
 
 ```json
 {
@@ -432,15 +426,13 @@ npm run format
 
 ### What the tests exercise
 
-Backend tests cover readiness and diagnostics, authentication and session validity, deposit ownership, banknote validation, duplicate requests and stale-deposit reconciliation.
+Backend tests cover hardware rules, authentication, inactivity expiration, deposit ownership and validation, duplicate operations, CIT transitions and cash-cycle rollover.
 
-CIT tests cover workflow transitions, manual confirmations, access restrictions, lock timeouts, delayed-lock completion, cash-cycle rollover and selected hardware and restart scenarios.
+Reporting tests cover daily boundaries and daylight-saving changes, receipt creation, print retries, access restrictions and PDF rendering. Frontend tests cover authentication, connection feedback, CIT interactions and uncertain banknote and print requests.
 
-Frontend tests cover authentication, connection feedback, uncertain banknote requests, stale-response protection and CIT interaction and session handling.
+Concurrent transactions, database failures and process termination remain planned recovery tests.
 
-Extended testing of concurrent transactions, database failures and process termination remains planned.
-
-JaCoCo generates backend coverage reports and excludes only the application bootstrap class. The build does not currently enforce a coverage threshold.
+JaCoCo generates backend coverage reports, excluding the application bootstrap class. The build does not currently enforce a coverage threshold.
 
 <a id="roadmap"></a>
 ## 🗺️ Roadmap
@@ -451,7 +443,7 @@ JaCoCo generates backend coverage reports and excludes only the application boot
 - [x] Implement PIN authentication, role-based access and server-side sessions
 - [x] Implement EUR deposits, banknote simulation and duplicate-request protection
 - [x] Implement CIT collection, persistent workflow state and cash-cycle rollover
-- [ ] Implement device and daily reports with virtual printing
+- [x] Implement device and daily reports with virtual printing
 - [ ] Implement maintenance commands and device lifecycle simulation
 - [ ] Add maintenance UI controls for hardware fault injection
 - [ ] Test concurrent requests, database failures and process interruption
@@ -464,22 +456,17 @@ JaCoCo generates backend coverage reports and excludes only the application boot
 - CIT operators authenticate with a unique PIN without selecting a profile.
 - The machine accepts one EUR banknote at a time.
 - Accepted banknotes cannot be returned to the user.
-- Logging out preserves the deposit without automatically printing a receipt.
+- Manual logout or inactivity expiration prints a receipt only when money was accepted.
 - Daily totals start at midnight in `Europe/Belgrade`.
-- Per-user daily reports require selecting a user.
+- Daily user reports group deposited amounts by cashier without a separate user selection.
 - Successful CIT completion resets the device total while preserving daily history.
 - Cassette replacement uses manual confirmations; delayed locking completes CIT without requiring a restart.
-
-Authentication and deposit rules are implemented. Reporting and cashbox
-replacement requirements guide the upcoming workflows.
 
 </details>
 
 ## 📌 Scope
 
-This is an independent educational and portfolio project based on observed machine behavior.
-
-Authentication, deposit and CIT workflows are implemented. Reporting requirements guide the next development phase.
+An independent educational and portfolio project based on observed machine behavior. It uses simulated hardware and a virtual printer; it does not connect to a physical device, implement a vendor protocol or process real money.
 
 ## 📄 License
 

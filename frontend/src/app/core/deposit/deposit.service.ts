@@ -17,6 +17,7 @@ export class DepositService {
   readonly pending = signal<PendingBanknote | null>(null);
   readonly notice = signal('');
   readonly loadError = signal('');
+  readonly activityAt = signal(0);
 
   open(): void {
     this.revision++;
@@ -102,6 +103,9 @@ export class DepositService {
       tap((result) => {
         this.revision++;
         this.deposit.set(result.deposit);
+        if (!result.replayed) {
+          this.activityAt.set(Date.now());
+        }
         this.removePending();
 
         this.notice.set(

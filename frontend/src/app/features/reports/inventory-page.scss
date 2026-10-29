@@ -1,0 +1,166 @@
+.headings {
+  display: grid;
+  grid-template-columns: 1fr 180px 180px;
+  align-items: center;
+  padding: 0 16px 12px;
+  font-size: 22px;
+
+  > :last-child {
+    text-align: right;
+  }
+}
+
+.total-row {
+  display: grid;
+  grid-template-columns: 100px minmax(160px, 1fr) 70px 150px 80px;
+  align-items: center;
+  gap: 20px;
+  min-height: 130px;
+  padding: 16px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  font-size: clamp(20px, 2.5vw, 30px);
+}
+
+.banknote {
+  display: grid;
+  place-items: center;
+  height: 60px;
+  border: 5px solid currentColor;
+  border-radius: 4px;
+  font-size: 40px;
+  line-height: 1;
+  padding-bottom: 1px;
+}
+
+.bag {
+  width: 64px;
+  height: 78px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  stroke-linejoin: round;
+}
+
+.amount {
+  text-align: center;
+}
+
+.machine-button.magnify {
+  min-height: 80px;
+  background: #c5e5df;
+
+  svg {
+    width: 36px;
+    height: 36px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 4;
+  }
+}
+
+.print-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+
+  button {
+    min-height: 76px;
+    padding: 14px;
+    background: #c5e5df;
+    font-size: 19px;
+    font-weight: 700;
+  }
+}
+
+.history-link {
+  display: block;
+  margin: 22px 0;
+  color: var(--text);
+  text-align: center;
+  font-size: 14px;
+}
+
+table {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-collapse: collapse;
+  font-size: 22px;
+}
+
+th,
+td {
+  padding: 18px;
+  text-align: center;
+}
+
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+
+th:last-child,
+td:last-child {
+  text-align: right;
+}
+
+tfoot {
+  border-top: 1px solid var(--border);
+}
+
+.error {
+  color: #a51e37;
+}
+
+.pending {
+  padding: 16px;
+  border: 1px solid var(--warning);
+
+  button {
+    min-height: 54px;
+    padding: 12px;
+  }
+}
+
+@media (max-width: 700px) {
+  .headings {
+    grid-template-columns: 1fr 100px 140px;
+    font-size: 17px;
+  }
+
+  .total-row {
+    grid-template-columns: 58px 1fr 95px 52px;
+    gap: 12px;
+    min-height: 105px;
+    padding: 12px;
+    font-size: 19px;
+  }
+
+  .banknote {
+    height: 44px;
+    font-size: 28px;
+  }
+
+  .bag {
+    display: none;
+  }
+
+  .machine-button.magnify {
+    min-height: 58px;
+  }
+
+  .print-actions {
+    gap: 8px;
+
+    button {
+      font-size: 13px;
+      padding: 10px;
+    }
+  }
+
+  th,
+  td {
+    padding: 12px 8px;
+    font-size: 17px;
+  }
+}

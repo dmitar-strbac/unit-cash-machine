@@ -1,0 +1,125 @@
+<section aria-label="Inventory">
+  @if (loadError()) {
+    <p class="error" role="alert">{{ loadError() }}</p>
+  }
+
+  @if (overview(); as totals) {
+    @if (detail) {
+      <h1>{{ detail === 'DEVICE_TOTAL' ? 'Device Total' : 'Day Total' }}</h1>
+
+      @if (selected(); as report) {
+        <table>
+          <thead>
+            <tr>
+              <th>Curr</th>
+              <th>Value</th>
+              <th>Amount</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of report.denominations; track row.denomination) {
+              <tr>
+                <td>{{ report.currency }}</td>
+                <td>{{ row.denomination | number: '1.2-2' }} ×</td>
+                <td>{{ row.banknoteCount }}</td>
+                <td>{{ row.totalCents / 100 | number: '1.2-2' }}</td>
+              </tr>
+            } @empty {
+              <tr>
+                <td colspan="4">No accepted banknotes.</td>
+              </tr>
+            }
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colspan="3">Total</th>
+              <th>{{ report.totalCents / 100 | number: '1.2-2' }}</th>
+            </tr>
+          </tfoot>
+        </table>
+      }
+    } @else {
+      <div class="headings">
+        <span></span>
+        <strong>Total</strong>
+        <span>Currency: {{ totals.deviceTotal.currency }}</span>
+      </div>
+
+      <div class="total-row">
+        <span class="banknote" aria-hidden="true">①</span>
+        <strong>Device Total</strong>
+        <svg class="bag" viewBox="0 0 80 90" aria-hidden="true">
+          <path d="M28 22 20 5Q40-3 60 5L52 22M28 22Q4 47 9 73Q10 84 40 84T71 73Q76 47 52 22Z" />
+        </svg>
+        <strong class="amount">
+          {{ totals.deviceTotal.totalCents / 100 | number: '1.2-2' }}
+        </strong>
+        <a
+          class="machine-button magnify"
+          routerLink="/inventory/device"
+          aria-label="View Device Total denominations"
+        >
+          <svg viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="16" cy="16" r="10" />
+            <path d="m24 24 11 11" />
+          </svg>
+        </a>
+      </div>
+
+      <div class="total-row">
+        <span class="banknote" aria-hidden="true">①</span>
+        <strong>Day Total</strong>
+        <svg class="bag" viewBox="0 0 80 90" aria-hidden="true">
+          <path d="M28 22 20 5Q40-3 60 5L52 22M28 22Q4 47 9 73Q10 84 40 84T71 73Q76 47 52 22Z" />
+        </svg>
+        <strong class="amount">
+          {{ totals.dayTotal.totalCents / 100 | number: '1.2-2' }}
+        </strong>
+        <a
+          class="machine-button magnify"
+          routerLink="/inventory/day"
+          aria-label="View Day Total denominations"
+        >
+          <svg viewBox="0 0 40 40" aria-hidden="true">
+            <circle cx="16" cy="16" r="10" />
+            <path d="m24 24 11 11" />
+          </svg>
+        </a>
+      </div>
+
+      <div class="print-actions">
+        <button class="machine-button" [disabled]="unavailable()" (click)="print('DAY_TOTAL')">
+          PRINT DAY TOTAL
+        </button>
+        <button class="machine-button" [disabled]="unavailable()" (click)="print('DAY_TOTAL_USER')">
+          PRINT DAY TOTAL USER
+        </button>
+        <button class="machine-button" [disabled]="unavailable()" (click)="print('DEVICE_TOTAL')">
+          PRINT DEVICE TOTAL
+        </button>
+      </div>
+
+      <a class="history-link" routerLink="/receipts">VIRTUAL PRINTER · SAVED RECEIPTS</a>
+    }
+  } @else if (!loadError()) {
+    <p class="message">Loading totals…</p>
+  }
+
+  @if (api.error()) {
+    <p class="error" role="alert">{{ api.error() }}</p>
+  }
+
+  @if (api.pending()) {
+    <div class="pending">
+      <p>A print request needs confirmation.</p>
+      <button class="machine-button" [disabled]="api.busy()" (click)="retry()">
+        {{ api.busy() ? 'CHECKING…' : 'CHECK LAST PRINT REQUEST' }}
+      </button>
+    </div>
+  }
+
+  @if (receipt(); as current) {
+    <app-receipt-preview [receipt]="current" />
+  }
+</section>
