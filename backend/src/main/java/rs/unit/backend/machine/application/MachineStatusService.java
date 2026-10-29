@@ -15,6 +15,7 @@ import rs.unit.backend.hardware.port.HardwareStatusPort;
 import rs.unit.backend.machine.domain.MachineReadinessPolicy;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfiguration;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfigurationRepository;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 
 @Service
 public class MachineStatusService {
@@ -24,14 +25,17 @@ public class MachineStatusService {
     private final MachineConfigurationRepository configurationRepository;
     private final HardwareStatusPort hardwareStatusPort;
     private final CollectionRepository collectionRepository;
+    private final MachineRuntimeGuard runtime;
 
     public MachineStatusService(
             MachineConfigurationRepository configurationRepository,
             HardwareStatusPort hardwareStatusPort,
-            CollectionRepository collectionRepository) {
+            CollectionRepository collectionRepository,
+            MachineRuntimeGuard runtime) {
         this.configurationRepository = configurationRepository;
         this.hardwareStatusPort = hardwareStatusPort;
         this.collectionRepository = collectionRepository;
+        this.runtime = runtime;
     }
 
     @Transactional(readOnly = true)
@@ -70,6 +74,19 @@ public class MachineStatusService {
                                             true));
                         });
 
+        var runtimeView = runtime.view();
+        boolean running = runtime.isRunning();
+
+        if (!running) {
+            alerts.add(
+                    new MachineAlert(
+                            "MACHINE_" + runtimeView.state().name(),
+                            Component.SYSTEM,
+                            Severity.WARNING,
+                            "Machine application state: " + runtimeView.state().name(),
+                            true));
+        }
+
         MachineDiagnostics diagnostics = new MachineDiagnostics(alerts);
 
         return new MachineStatus(
@@ -80,11 +97,12 @@ public class MachineStatusService {
                 configuration.getTimeZone(),
                 true,
                 MachineReadinessPolicy.isSecure(hardware),
-                MachineReadinessPolicy.isDepositHardwareReady(hardware),
-                MachineReadinessPolicy.isPrintingAvailable(hardware),
+                running && MachineReadinessPolicy.isDepositHardwareReady(hardware),
+                running && MachineReadinessPolicy.isPrintingAvailable(hardware),
                 hardware,
                 diagnostics.indicator(),
                 diagnostics.alertCount(),
-                diagnostics.alerts());
+                diagnostics.alerts(),
+                runtimeView);
     }
 }

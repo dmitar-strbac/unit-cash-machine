@@ -21,6 +21,7 @@ import rs.unit.backend.hardware.model.HardwareSnapshot.PrinterState;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfiguration;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfigurationRepository;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 import rs.unit.backend.printing.application.ReceiptFormatter;
 import rs.unit.backend.printing.application.ReceiptView;
 import rs.unit.backend.printing.infrastructure.persistence.ReceiptRepository;
@@ -36,6 +37,7 @@ public class ReportingService {
     private final HardwareStatusPort hardware;
     private final ReceiptFormatter formatter;
     private final Clock clock;
+    private final MachineRuntimeGuard runtime;
 
     public ReportingService(
             ReportRepository reports,
@@ -43,19 +45,22 @@ public class ReportingService {
             MachineConfigurationRepository configurations,
             HardwareStatusPort hardware,
             ReceiptFormatter formatter,
-            Clock clock) {
+            Clock clock,
+            MachineRuntimeGuard runtime) {
         this.reports = reports;
         this.receipts = receipts;
         this.configurations = configurations;
         this.hardware = hardware;
         this.formatter = formatter;
         this.clock = clock;
+        this.runtime = runtime;
     }
 
     @Transactional
     public Overview overview(AuthenticatedUser user) {
         requireManager(user);
         reports.lockMachine();
+        runtime.requireOperational(user);
 
         MachineConfiguration machine = configuration();
         Instant now = clock.instant();
@@ -69,6 +74,7 @@ public class ReportingService {
     public ReportView report(AuthenticatedUser user, ReportType type) {
         requireManager(user);
         reports.lockMachine();
+        runtime.requireOperational(user);
 
         return build(type, configuration(), clock.instant());
     }
@@ -77,6 +83,7 @@ public class ReportingService {
     public ReceiptView printReport(AuthenticatedUser user, ReportType type, UUID requestId) {
         requireManager(user);
         reports.lockMachine();
+        runtime.requireOperational(user);
 
         ReceiptView existing = receipts.findByRequestId(requestId).orElse(null);
 
@@ -112,6 +119,7 @@ public class ReportingService {
     public PrintResult reprint(AuthenticatedUser user, UUID receiptId, UUID requestId) {
         requireManager(user);
         reports.lockMachine();
+        runtime.requireOperational(user);
         receipt(receiptId);
 
         return attempt(receiptId, requestId);
@@ -181,6 +189,7 @@ public class ReportingService {
 
         requireUnexpired(user);
         reports.lockMachine();
+        runtime.requireOperational(user);
 
         String token =
                 UUID.randomUUID().toString().replace("-", "")
@@ -284,6 +293,13 @@ public class ReportingService {
                     receiptId, requestId, previous.status(), previous.errorCode(), true);
         }
 
+        if (!runtime.isRunning()) {
+            receipts.recordAttempt(
+                    requestId, receiptId, clock.instant(), "FAILED", "MACHINE_UNAVAILABLE");
+
+            return new PrintResult(receiptId, requestId, "FAILED", "MACHINE_UNAVAILABLE", false);
+        }
+
         PrinterState printer = hardware.snapshot().printer();
 
         String status = printer == PrinterState.READY ? "PRINTED" : "FAILED";
@@ -311,6 +327,7 @@ public class ReportingService {
         }
 
         requireUnexpired(user);
+        runtime.requireOperational(user);
     }
 
     private void requireUnexpired(AuthenticatedUser user) {

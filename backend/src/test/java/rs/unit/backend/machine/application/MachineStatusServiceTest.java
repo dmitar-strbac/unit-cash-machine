@@ -11,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import rs.unit.backend.collection.infrastructure.persistence.CollectionRepository;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfigurationRepository;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 
 class MachineStatusServiceTest {
 
@@ -19,16 +20,17 @@ class MachineStatusServiceTest {
         MachineConfigurationRepository repository = mock(MachineConfigurationRepository.class);
         HardwareStatusPort hardware = mock(HardwareStatusPort.class);
         CollectionRepository collectionRepository = mock(CollectionRepository.class);
+        MachineRuntimeGuard runtime = mock(MachineRuntimeGuard.class);
 
         when(repository.findById((short) 1)).thenReturn(Optional.empty());
 
         MachineStatusService service =
-                new MachineStatusService(repository, hardware, collectionRepository);
+                new MachineStatusService(repository, hardware, collectionRepository, runtime);
 
         IllegalStateException exception =
                 assertThrows(IllegalStateException.class, service::getStatus);
 
         assertEquals("Machine configuration is missing.", exception.getMessage());
-        verifyNoInteractions(hardware);
+        verifyNoInteractions(hardware, runtime);
     }
 }

@@ -18,7 +18,8 @@ import org.springframework.web.context.WebApplicationContext;
 @SpringBootTest(
         properties = {
             "unit.collection.monitor.enabled=false",
-            "unit.deposit.monitor.enabled=false"
+            "unit.deposit.monitor.enabled=false",
+            "unit.maintenance.monitor.enabled=false"
         })
 @ActiveProfiles("test")
 class SimulationDisabledIntegrationTest {

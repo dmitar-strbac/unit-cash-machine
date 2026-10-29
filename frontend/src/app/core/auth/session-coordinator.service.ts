@@ -17,6 +17,7 @@ import {
 } from 'rxjs';
 import { DepositService } from '../deposit/deposit.service';
 import { CsrfHttpService } from '../http/csrf-http.service';
+import { MaintenanceService } from '../maintenance/maintenance.service';
 import { CashierReceiptService } from '../report/cashier-receipt.service';
 import { AuthenticatedUser } from './auth.models';
 import { AuthService } from './auth.service';
@@ -27,6 +28,7 @@ export class SessionCoordinator {
   private readonly deposits = inject(DepositService);
   private readonly receipts = inject(CashierReceiptService);
   private readonly csrf = inject(CsrfHttpService);
+  private readonly maintenance = inject(MaintenanceService);
   private readonly router = inject(Router);
   private readonly document = inject(DOCUMENT);
 
@@ -73,7 +75,7 @@ export class SessionCoordinator {
     timer(0, 250)
       .pipe(takeUntilDestroyed())
       .subscribe(() => {
-        if (!this.current || this.current.role === 'CIT') {
+        if (this.maintenance.blocked() || !this.current || this.current.role === 'CIT') {
           return;
         }
 
@@ -88,7 +90,11 @@ export class SessionCoordinator {
 
     timer(0, 5000)
       .pipe(
-        filter((tick) => tick === 0 || (this.auth.user() !== null && !this.ending())),
+        filter(
+          (tick) =>
+            !this.maintenance.blocked() &&
+            (tick === 0 || (this.auth.user() !== null && !this.ending())),
+        ),
         exhaustMap(() => this.auth.refresh().pipe(catchError(() => EMPTY))),
         takeUntilDestroyed(),
       )
@@ -98,7 +104,7 @@ export class SessionCoordinator {
   logout(automatic = false): void {
     const user = this.auth.user();
 
-    if (!user || user.role === 'CIT' || this.ending()) {
+    if (this.maintenance.blocked() || !user || user.role === 'CIT' || this.ending()) {
       return;
     }
 
@@ -161,6 +167,16 @@ export class SessionCoordinator {
     if (!user) {
       this.removeDeadline();
 
+      if (this.maintenance.blocked()) {
+        this.receipts.clear();
+
+        if (!this.deposits.pending()) {
+          this.deposits.clear();
+        }
+
+        return;
+      }
+
       if (previous && previous.role !== 'CIT') {
         const needsReceipt =
           previous.role === 'CASHIER' &&
@@ -199,6 +215,7 @@ export class SessionCoordinator {
     const user = this.current;
 
     if (
+      this.maintenance.blocked() ||
       !user ||
       user.role === 'CIT' ||
       !this.queued ||
@@ -232,7 +249,6 @@ export class SessionCoordinator {
         },
         error: () => {
           if (identity === this.identity) {
-            this.queued = true;
             this.nextActivityAt = Date.now() + 3000;
           }
         },

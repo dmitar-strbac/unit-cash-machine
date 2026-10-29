@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MachineStatusService } from '../../core/machine/machine-status.service';
+import { MaintenanceService } from '../../core/maintenance/maintenance.service';
 
 @Component({
   selector: 'app-diagnostics-page',
@@ -8,6 +9,10 @@ import { MachineStatusService } from '../../core/machine/machine-status.service'
   template: `
     <section aria-labelledby="diagnostics-title">
       <h1 id="diagnostics-title">Machine diagnostics</h1>
+
+      @if (maintenance.runtime()?.notice; as notice) {
+        <p class="message" role="status">{{ notice }}</p>
+      }
 
       @if (connection(); as current) {
         @if (current.state === 'connected') {
@@ -77,4 +82,5 @@ import { MachineStatusService } from '../../core/machine/machine-status.service'
 })
 export class DiagnosticsPage {
   protected readonly connection = toSignal(inject(MachineStatusService).connection$);
+  protected readonly maintenance = inject(MaintenanceService);
 }

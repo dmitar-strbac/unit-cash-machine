@@ -53,7 +53,8 @@ import rs.unit.backend.user.domain.UserRole;
 @SpringBootTest(
         properties = {
             "unit.collection.monitor.enabled=false",
-            "unit.deposit.monitor.enabled=false"
+            "unit.deposit.monitor.enabled=false",
+            "unit.maintenance.monitor.enabled=false"
         })
 @Transactional
 class ReportingIntegrationTest {

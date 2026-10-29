@@ -1,3 +1,5 @@
+import { MachineRuntimeView } from '../maintenance/maintenance.models';
+
 export interface HardwareSnapshot {
   acceptor: 'READY' | 'ACCEPTING' | 'JAMMED' | 'OFFLINE' | 'UNKNOWN';
   cashbox: 'PRESENT' | 'FULL' | 'ABSENT' | 'UNKNOWN';
@@ -9,7 +11,7 @@ export interface HardwareSnapshot {
 
 export interface MachineAlert {
   code: string;
-  source: 'ACCEPTOR' | 'CASHBOX' | 'DOOR' | 'LOCK' | 'EXTENSION_BOARD' | 'PRINTER';
+  source: 'ACCEPTOR' | 'CASHBOX' | 'DOOR' | 'LOCK' | 'EXTENSION_BOARD' | 'PRINTER' | 'SYSTEM';
   severity: 'WARNING' | 'ERROR';
   message: string;
   blocksDeposit: boolean;
@@ -29,4 +31,5 @@ export interface MachineStatus {
   indicator: 'GREEN' | 'AMBER' | 'RED';
   alertCount: number;
   alerts: MachineAlert[];
+  runtime: MachineRuntimeView;
 }

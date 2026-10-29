@@ -43,6 +43,7 @@ import rs.unit.backend.hardware.model.HardwareSnapshot.LockState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.PrinterState;
 import rs.unit.backend.hardware.model.PhysicalAction;
 import rs.unit.backend.hardware.port.HardwareControlPort;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
@@ -55,6 +56,7 @@ class CollectionServiceTest {
     @Mock private HardwareControlPort hardware;
     @Mock private UserAccountRepository users;
     @Mock private Clock clock;
+    @Mock private MachineRuntimeGuard runtime;
 
     private final Instant now = Instant.parse("2026-01-01T12:00:00Z");
     private final UUID operatorId = UUID.randomUUID();
@@ -89,6 +91,8 @@ class CollectionServiceTest {
                                         UserRole.CIT,
                                         "unused-hash",
                                         true)));
+
+        lenient().when(runtime.isRunning()).thenReturn(true);
 
         service = newService(5000);
         service.beginOrResume(cit);
@@ -787,13 +791,26 @@ class CollectionServiceTest {
         verify(repository).complete(collection, now, 2000L);
     }
 
+    @Test
+    void synchronizationDoesNotChangeCollectionWhenApplicationIsNotRunning() {
+        when(runtime.isRunning()).thenReturn(false);
+
+        service.synchronize();
+
+        verify(repository).lockMachine();
+        verify(repository, never()).findUnfinished();
+
+        org.mockito.Mockito.verifyNoInteractions(deposits, hardware, users);
+    }
+
     private void assertNoCollectionCompletion() {
         verify(repository, never())
                 .complete(any(StoredCollection.class), any(Instant.class), anyLong());
     }
 
     private CollectionService newService(long timeoutMillis) {
-        return new CollectionService(repository, deposits, hardware, users, clock, timeoutMillis);
+        return new CollectionService(
+                repository, deposits, hardware, users, clock, timeoutMillis, runtime);
     }
 
     private void use(StoredCollection collection, HardwareSnapshot snapshot) {

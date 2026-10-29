@@ -12,6 +12,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import rs.unit.backend.authentication.application.AuthenticatedUser;
 import rs.unit.backend.authentication.application.SessionActivityService;
 import rs.unit.backend.deposit.application.DepositService;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
 public class SessionValidityFilter extends OncePerRequestFilter {
@@ -20,16 +21,19 @@ public class SessionValidityFilter extends OncePerRequestFilter {
     private final UserAccountRepository repository;
     private final SessionActivityService activityService;
     private final DepositService deposits;
+    private final MachineRuntimeGuard runtime;
 
     public SessionValidityFilter(
             Clock clock,
             UserAccountRepository repository,
             SessionActivityService activityService,
-            DepositService deposits) {
+            DepositService deposits,
+            MachineRuntimeGuard runtime) {
         this.clock = clock;
         this.repository = repository;
         this.activityService = activityService;
         this.deposits = deposits;
+        this.runtime = runtime;
     }
 
     @Override
@@ -49,7 +53,9 @@ public class SessionValidityFilter extends OncePerRequestFilter {
                                     .isPresent();
 
             boolean sessionValid =
-                    accountValid && activityService.isActive(user, request.getSession(false));
+                    accountValid
+                            && runtime.isSessionValid(user)
+                            && activityService.isActive(user, request.getSession(false));
 
             if (!sessionValid) {
                 deposits.reconcile();

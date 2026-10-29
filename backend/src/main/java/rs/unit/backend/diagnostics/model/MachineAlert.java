@@ -9,7 +9,8 @@ public record MachineAlert(
         DOOR,
         LOCK,
         EXTENSION_BOARD,
-        PRINTER
+        PRINTER,
+        SYSTEM
     }
 
     public enum Severity {

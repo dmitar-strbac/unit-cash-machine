@@ -5,10 +5,12 @@ import { filter, map } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
 import { SessionCoordinator } from './core/auth/session-coordinator.service';
 import { MachineStatusService } from './core/machine/machine-status.service';
+import { MaintenanceService } from './core/maintenance/maintenance.service';
+import { RuntimeScreen } from './features/maintenance/runtime-screen';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink],
+  imports: [RouterOutlet, RouterLink, RuntimeScreen],
   templateUrl: './app.html',
   styleUrl: './app.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -18,6 +20,7 @@ export class App {
 
   protected readonly auth = inject(AuthService);
   protected readonly connection = toSignal(inject(MachineStatusService).connection$);
+  protected readonly maintenance = inject(MaintenanceService);
   protected readonly session = inject(SessionCoordinator);
 
   private readonly currentUrl = toSignal(
@@ -60,6 +63,14 @@ export class App {
 
     if (path === '/inventory' || path === '/receipts') {
       return '/session';
+    }
+
+    if (path === '/system') {
+      return '/session';
+    }
+
+    if (path === '/components') {
+      return this.router.parseUrl(url).queryParams['id'] ? '/components' : '/session';
     }
 
     if (path === '/deposit-receipt') {

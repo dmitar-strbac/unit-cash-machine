@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import rs.unit.backend.collection.application.CollectionService;
 import rs.unit.backend.deposit.application.DepositService;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
@@ -25,6 +26,7 @@ public class AuthenticationService {
     private final CollectionService collectionService;
     private final LoginAttemptLimiter attemptLimiter;
     private final Clock clock;
+    private final MachineRuntimeGuard runtime;
 
     private final String dummyPinHash;
 
@@ -34,13 +36,15 @@ public class AuthenticationService {
             DepositService depositService,
             CollectionService collectionService,
             LoginAttemptLimiter attemptLimiter,
-            Clock clock) {
+            Clock clock,
+            MachineRuntimeGuard runtime) {
         this.repository = repository;
         this.pinService = pinService;
         this.depositService = depositService;
         this.collectionService = collectionService;
         this.attemptLimiter = attemptLimiter;
         this.clock = clock;
+        this.runtime = runtime;
         this.dummyPinHash = pinService.encode("000000000000");
     }
 
@@ -100,11 +104,15 @@ public class AuthenticationService {
     }
 
     private AuthenticatedUser authenticatedUser(UserAccount account) {
+        long generation = runtime.generationForLogin();
+
         return new AuthenticatedUser(
                 account.getId(),
                 account.getDisplayName(),
                 account.getRole(),
-                clock.instant().plus(SESSION_LIFETIME));
+                clock.instant().plus(SESSION_LIFETIME),
+                UUID.randomUUID(),
+                generation);
     }
 
     private ResponseStatusException invalidCredentials() {

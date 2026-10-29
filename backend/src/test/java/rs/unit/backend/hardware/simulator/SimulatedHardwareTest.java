@@ -17,7 +17,12 @@ import rs.unit.backend.hardware.model.HardwareSnapshot.ExtensionBoardState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.LockState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.PrinterState;
 
-@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
+@SpringBootTest(
+        properties = {
+            "unit.collection.monitor.enabled=false",
+            "unit.deposit.monitor.enabled=false",
+            "unit.maintenance.monitor.enabled=false"
+        })
 @Transactional
 class SimulatedHardwareTest {
 

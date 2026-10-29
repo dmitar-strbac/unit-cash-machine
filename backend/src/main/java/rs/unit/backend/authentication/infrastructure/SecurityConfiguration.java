@@ -21,6 +21,8 @@ import rs.unit.backend.collection.application.CollectionService;
 import rs.unit.backend.collection.infrastructure.CollectionLogoutFilter;
 import rs.unit.backend.deposit.application.DepositService;
 import rs.unit.backend.deposit.infrastructure.DepositLogoutHandler;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
+import rs.unit.backend.maintenance.infrastructure.MachineAvailabilityFilter;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
 @Configuration(proxyBeanMethods = false)
@@ -52,7 +54,8 @@ public class SecurityConfiguration {
             DepositLogoutHandler depositLogoutHandler,
             CollectionService collectionService,
             SessionActivityService activityService,
-            DepositService depositService)
+            DepositService depositService,
+            MachineRuntimeGuard runtime)
             throws Exception {
 
         http.formLogin(AbstractHttpConfigurer::disable)
@@ -86,6 +89,17 @@ public class SecurityConfiguration {
                                         .authenticated()
                                         .requestMatchers("/api/simulation/**")
                                         .hasRole("MAINTENANCE")
+                                        .requestMatchers(HttpMethod.GET, "/api/machine/runtime")
+                                        .permitAll()
+                                        .requestMatchers(
+                                                HttpMethod.POST,
+                                                "/api/simulator/power-on",
+                                                "/api/simulator/start-application")
+                                        .permitAll()
+                                        .requestMatchers("/api/maintenance/components")
+                                        .hasRole("MAINTENANCE")
+                                        .requestMatchers("/api/maintenance/**")
+                                        .hasAnyRole("MANAGEMENT", "MAINTENANCE")
                                         .requestMatchers(
                                                 HttpMethod.GET,
                                                 "/api/receipt-access",
@@ -147,8 +161,11 @@ public class SecurityConfiguration {
                                                         response.setStatus(204)));
 
         http.addFilterAfter(
-                new SessionValidityFilter(clock, userRepository, activityService, depositService),
+                new SessionValidityFilter(
+                        clock, userRepository, activityService, depositService, runtime),
                 SecurityContextHolderFilter.class);
+
+        http.addFilterAfter(new MachineAvailabilityFilter(runtime), SessionValidityFilter.class);
 
         http.addFilterBefore(new CollectionLogoutFilter(collectionService), LogoutFilter.class);
 
