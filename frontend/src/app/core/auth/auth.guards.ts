@@ -48,3 +48,31 @@ export const managementGuard: CanActivateFn = () => {
     catchError(() => of(router.parseUrl('/login/management'))),
   );
 };
+
+export const systemGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+
+  return auth.refresh().pipe(
+    map((user) =>
+      user?.role === 'MANAGEMENT' || user?.role === 'MAINTENANCE'
+        ? true
+        : router.parseUrl(user ? '/session' : '/settings'),
+    ),
+    catchError(() => of(router.parseUrl('/settings'))),
+  );
+};
+
+export const maintenanceGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+
+  return auth.refresh().pipe(
+    map((user) =>
+      user?.role === 'MAINTENANCE'
+        ? true
+        : router.parseUrl(user ? '/session' : '/login/maintenance'),
+    ),
+    catchError(() => of(router.parseUrl('/login/maintenance'))),
+  );
+};

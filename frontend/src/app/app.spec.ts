@@ -4,8 +4,10 @@ import { provideRouter } from '@angular/router';
 import { of, Subject } from 'rxjs';
 import { App } from './app';
 import { AuthService } from './core/auth/auth.service';
+import { SessionCoordinator } from './core/auth/session-coordinator.service';
 import { MachineStatus } from './core/machine/machine-status';
 import { MachineConnection, MachineStatusService } from './core/machine/machine-status.service';
+import { MaintenanceService } from './core/maintenance/maintenance.service';
 
 describe('App', () => {
   let connection: Subject<MachineConnection>;
@@ -31,6 +33,14 @@ describe('App', () => {
     indicator: 'GREEN',
     alertCount: 0,
     alerts: [],
+    runtime: {
+      state: 'RUNNING',
+      generation: 0,
+      commandId: null,
+      action: null,
+      completesAt: null,
+      notice: null,
+    },
   };
 
   beforeEach(async () => {
@@ -40,6 +50,23 @@ describe('App', () => {
       imports: [App],
       providers: [
         provideRouter([]),
+        {
+          provide: MaintenanceService,
+          useValue: {
+            runtime: signal(healthyStatus.runtime),
+            blocked: signal(false),
+            disconnected: signal(false),
+          },
+        },
+        {
+          provide: SessionCoordinator,
+          useValue: {
+            timedOut: signal(false),
+            ending: signal(false),
+            error: signal(''),
+            logout: vi.fn(),
+          },
+        },
         {
           provide: MachineStatusService,
           useValue: {

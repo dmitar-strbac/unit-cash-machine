@@ -19,14 +19,14 @@ import { DepositPanel } from '../deposit/deposit-panel';
           @case ('MANAGEMENT') {
             <div class="session-menu">
               <a class="machine-button menu-button" routerLink="/inventory">INVENTORY</a>
-              <button class="machine-button menu-button" disabled>SYSTEM</button>
+              <a class="machine-button menu-button" routerLink="/system">SYSTEM</a>
             </div>
           }
 
           @case ('MAINTENANCE') {
             <div class="session-menu">
-              <button class="machine-button menu-button" disabled>SYSTEM</button>
-              <button class="machine-button menu-button" disabled>COMPONENT INFO</button>
+              <a class="machine-button menu-button" routerLink="/system">SYSTEM</a>
+              <a class="machine-button menu-button" routerLink="/components">COMPONENT INFO</a>
             </div>
           }
         }

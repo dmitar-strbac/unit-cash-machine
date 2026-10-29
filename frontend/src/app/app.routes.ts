@@ -1,5 +1,12 @@
 import { Routes } from '@angular/router';
-import { citGuard, guestGuard, managementGuard, sessionGuard } from './core/auth/auth.guards';
+import {
+  citGuard,
+  guestGuard,
+  maintenanceGuard,
+  managementGuard,
+  sessionGuard,
+  systemGuard,
+} from './core/auth/auth.guards';
 
 export const routes: Routes = [
   {
@@ -96,6 +103,19 @@ export const routes: Routes = [
     title: 'Unit — Deposit receipt',
     loadComponent: () =>
       import('./features/printing/deposit-receipt-page').then((m) => m.DepositReceiptPage),
+  },
+  {
+    path: 'system',
+    title: 'Unit — System',
+    canActivate: [systemGuard],
+    loadComponent: () => import('./features/maintenance/system-page').then((m) => m.SystemPage),
+  },
+  {
+    path: 'components',
+    title: 'Unit — Components',
+    canActivate: [maintenanceGuard],
+    loadComponent: () =>
+      import('./features/maintenance/components-page').then((m) => m.ComponentsPage),
   },
   {
     path: '**',
