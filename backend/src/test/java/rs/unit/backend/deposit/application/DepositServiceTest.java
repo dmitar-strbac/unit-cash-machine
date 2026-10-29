@@ -41,6 +41,7 @@ import rs.unit.backend.hardware.model.HardwareSnapshot.ExtensionBoardState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.LockState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.PrinterState;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
+import rs.unit.backend.report.application.ReportingService;
 import rs.unit.backend.user.domain.UserRole;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +50,8 @@ class DepositServiceTest {
     @Mock private DepositRepository repository;
 
     @Mock private HardwareStatusPort hardware;
+
+    @Mock private ReportingService reporting;
 
     private final Instant now = Instant.parse("2026-01-01T12:00:00Z");
     private final UUID userId = UUID.randomUUID();
@@ -65,7 +68,9 @@ class DepositServiceTest {
                 new AuthenticatedUser(
                         userId, "Test Cashier", UserRole.CASHIER, now.plusSeconds(900), loginId);
 
-        service = new DepositService(repository, hardware, Clock.fixed(now, ZoneOffset.UTC));
+        service =
+                new DepositService(
+                        repository, hardware, Clock.fixed(now, ZoneOffset.UTC), reporting);
 
         service.start(cashier);
 
@@ -96,11 +101,15 @@ class DepositServiceTest {
 
         clearInvocations(repository);
 
+        clearInvocations(reporting);
+
         lenient().when(repository.findByLoginId(loginId)).thenReturn(Optional.of(activeDeposit));
 
         lenient().when(repository.totals(activeDeposit.id())).thenReturn(new Totals(0, 0));
 
         lenient().when(hardware.snapshot()).thenReturn(readyHardware());
+
+        lenient().when(repository.hasValidSession(loginId, runtimeId, now)).thenReturn(true);
     }
 
     @Test
@@ -386,6 +395,7 @@ class DepositServiceTest {
 
         verify(repository).lockMachine();
         verify(repository).complete(activeDeposit.id(), now);
+        verify(reporting).captureDeposit(activeDeposit.id());
     }
 
     @Test
@@ -441,6 +451,39 @@ class DepositServiceTest {
         when(repository.hasUnfinishedCollection()).thenReturn(true);
 
         assertFalse(service.current(cashier).acceptingEnabled());
+    }
+
+    @Test
+    void inactiveSessionCannotReadDepositOrInsertBanknotes() {
+        when(repository.hasValidSession(loginId, runtimeId, now)).thenReturn(false);
+
+        assertStatus(HttpStatus.UNAUTHORIZED, () -> service.current(cashier));
+
+        assertStatus(
+                HttpStatus.UNAUTHORIZED,
+                () -> service.insert(cashier, UUID.randomUUID(), "EUR", 20));
+
+        verify(repository, never())
+                .recordOperation(
+                        any(UUID.class),
+                        any(UUID.class),
+                        anyString(),
+                        anyInt(),
+                        any(Outcome.class),
+                        any(Instant.class));
+    }
+
+    @Test
+    void sessionIsInactiveAtAbsoluteExpirationWithoutCheckingDepositValidity() {
+        var expired = new AuthenticatedUser(userId, "Test Cashier", UserRole.CASHIER, now, loginId);
+
+        assertFalse(service.isSessionActive(expired));
+
+        verify(repository).closeUnavailableDeposits(runtimeId, now);
+        verify(repository).closeDepositsOfUnavailableAccounts(now);
+
+        verify(repository, never())
+                .hasValidSession(any(UUID.class), any(UUID.class), any(Instant.class));
     }
 
     private StoredDeposit deposit(

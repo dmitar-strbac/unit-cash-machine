@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
-import { EMPTY, catchError, exhaustMap, filter, map, timer } from 'rxjs';
+import { filter, map } from 'rxjs';
 import { AuthService } from './core/auth/auth.service';
+import { SessionCoordinator } from './core/auth/session-coordinator.service';
 import { MachineStatusService } from './core/machine/machine-status.service';
 
 @Component({
@@ -17,6 +18,7 @@ export class App {
 
   protected readonly auth = inject(AuthService);
   protected readonly connection = toSignal(inject(MachineStatusService).connection$);
+  protected readonly session = inject(SessionCoordinator);
 
   private readonly currentUrl = toSignal(
     this.router.events.pipe(
@@ -52,6 +54,18 @@ export class App {
       return this.auth.user() ? this.sessionTarget() : '/';
     }
 
+    if (path === '/inventory/device' || path === '/inventory/day') {
+      return '/inventory';
+    }
+
+    if (path === '/inventory' || path === '/receipts') {
+      return '/session';
+    }
+
+    if (path === '/deposit-receipt') {
+      return '/';
+    }
+
     return '/';
   });
 
@@ -76,18 +90,4 @@ export class App {
 
     return count === 0 ? 'No alerts' : `${count} ${count === 1 ? 'alert' : 'alerts'}`;
   });
-
-  constructor() {
-    timer(0, 15000)
-      .pipe(
-        filter((tick) => tick === 0 || this.auth.user() !== null),
-        exhaustMap(() => this.auth.refresh().pipe(catchError(() => EMPTY))),
-        takeUntilDestroyed(),
-      )
-      .subscribe(() => {
-        if (!this.auth.user() && this.router.url.split(/[?#]/)[0] === '/session') {
-          void this.router.navigateByUrl('/', { replaceUrl: true });
-        }
-      });
-  }
 }

@@ -38,7 +38,11 @@ import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccount;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
-@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
+@SpringBootTest(
+        properties = {
+            "unit.collection.monitor.enabled=false",
+            "unit.deposit.monitor.enabled=false"
+        })
 @ActiveProfiles("simulation")
 @Transactional
 class CollectionIntegrationTest {
@@ -65,6 +69,8 @@ class CollectionIntegrationTest {
     void setUp() {
         when(clock.instant()).thenReturn(now);
 
+        jdbc.update("DELETE FROM cash_machine.print_attempt");
+        jdbc.update("DELETE FROM cash_machine.receipt");
         jdbc.update("DELETE FROM cash_machine.cash_collection_event");
         jdbc.update("DELETE FROM cash_machine.cash_collection");
         jdbc.update("DELETE FROM cash_machine.deposit_banknote_operation");

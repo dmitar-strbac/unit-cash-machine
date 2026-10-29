@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { citGuard, guestGuard, sessionGuard } from './core/auth/auth.guards';
+import { citGuard, guestGuard, managementGuard, sessionGuard } from './core/auth/auth.guards';
 
 export const routes: Routes = [
   {
@@ -64,6 +64,38 @@ export const routes: Routes = [
     path: 'info',
     title: 'Unit — Information',
     loadComponent: () => import('./features/info/info-page').then((m) => m.InfoPage),
+  },
+  {
+    path: 'inventory',
+    title: 'Unit — Inventory',
+    canActivate: [managementGuard],
+    loadComponent: () => import('./features/reports/inventory-page').then((m) => m.InventoryPage),
+  },
+  {
+    path: 'inventory/device',
+    title: 'Unit — Device Total',
+    canActivate: [managementGuard],
+    data: { reportType: 'DEVICE_TOTAL' },
+    loadComponent: () => import('./features/reports/inventory-page').then((m) => m.InventoryPage),
+  },
+  {
+    path: 'inventory/day',
+    title: 'Unit — Day Total',
+    canActivate: [managementGuard],
+    data: { reportType: 'DAY_TOTAL' },
+    loadComponent: () => import('./features/reports/inventory-page').then((m) => m.InventoryPage),
+  },
+  {
+    path: 'receipts',
+    title: 'Unit — Virtual printer',
+    canActivate: [managementGuard],
+    loadComponent: () => import('./features/printing/receipts-page').then((m) => m.ReceiptsPage),
+  },
+  {
+    path: 'deposit-receipt',
+    title: 'Unit — Deposit receipt',
+    loadComponent: () =>
+      import('./features/printing/deposit-receipt-page').then((m) => m.DepositReceiptPage),
   },
   {
     path: '**',

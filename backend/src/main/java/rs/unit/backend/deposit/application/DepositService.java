@@ -8,12 +8,14 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 import rs.unit.backend.authentication.application.AuthenticatedUser;
+import rs.unit.backend.authentication.application.SessionTimeoutPolicy;
 import rs.unit.backend.deposit.domain.BanknotePolicy;
 import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository;
 import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository.StoredDeposit;
 import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository.StoredOperation;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
 import rs.unit.backend.machine.domain.MachineReadinessPolicy;
+import rs.unit.backend.report.application.ReportingService;
 import rs.unit.backend.user.domain.UserRole;
 
 @Service
@@ -23,11 +25,17 @@ public class DepositService {
     private final HardwareStatusPort hardware;
     private final Clock clock;
     private final UUID runtimeId = UUID.randomUUID();
+    private final ReportingService reporting;
 
-    public DepositService(DepositRepository repository, HardwareStatusPort hardware, Clock clock) {
+    public DepositService(
+            DepositRepository repository,
+            HardwareStatusPort hardware,
+            Clock clock,
+            ReportingService reporting) {
         this.repository = repository;
         this.hardware = hardware;
         this.clock = clock;
+        this.reporting = reporting;
     }
 
     @Transactional
@@ -42,6 +50,8 @@ public class DepositService {
         repository.closeUnavailableDeposits(runtimeId, now);
 
         repository.closeDepositsOfUnavailableAccounts(now);
+
+        reporting.captureFinishedDeposits();
 
         if (repository.hasUnfinishedCollection()) {
             throw new ResponseStatusException(
@@ -63,6 +73,7 @@ public class DepositService {
 
         Instant now = clock.instant();
         requireValidSession(user, now);
+        requireActiveSession(user, now);
 
         return view(findOwnedDeposit(user), now);
     }
@@ -77,6 +88,7 @@ public class DepositService {
 
         Instant now = clock.instant();
         requireValidSession(user, now);
+        requireActiveSession(user, now);
 
         StoredDeposit deposit = findOwnedDeposit(user);
         StoredOperation previous = repository.findOperation(operationId).orElse(null);
@@ -111,6 +123,10 @@ public class DepositService {
 
         repository.recordOperation(operationId, deposit.id(), currency, denomination, outcome, now);
 
+        repository.recordActivity(
+                user.loginId(),
+                SessionTimeoutPolicy.inactivityDeadline(user.role(), now, user.expiresAt()));
+
         return new BanknoteResult(operationId, outcome, false, view(deposit, now));
     }
 
@@ -125,10 +141,12 @@ public class DepositService {
         StoredDeposit deposit = findOwnedDeposit(user);
 
         if (!"ACTIVE".equals(deposit.status())) {
+            reporting.captureDeposit(deposit.id());
             return;
         }
 
         repository.complete(deposit.id(), clock.instant());
+        reporting.captureDeposit(deposit.id());
     }
 
     private StoredDeposit findOwnedDeposit(AuthenticatedUser user) {
@@ -175,6 +193,54 @@ public class DepositService {
     }
 
     @Transactional
+    public void reconcile() {
+        repository.lockMachine();
+
+        Instant now = clock.instant();
+
+        repository.closeUnavailableDeposits(runtimeId, now);
+        repository.closeDepositsOfUnavailableAccounts(now);
+        reporting.captureFinishedDeposits();
+    }
+
+    @Transactional
+    public boolean isSessionActive(AuthenticatedUser user) {
+        requireCashier(user);
+        repository.lockMachine();
+
+        Instant now = clock.instant();
+
+        repository.closeUnavailableDeposits(runtimeId, now);
+        repository.closeDepositsOfUnavailableAccounts(now);
+        reporting.captureFinishedDeposits();
+
+        return now.isBefore(user.expiresAt())
+                && repository.hasValidSession(user.loginId(), runtimeId, now);
+    }
+
+    @Transactional
+    public void recordActivity(AuthenticatedUser user) {
+        requireCashier(user);
+        repository.lockMachine();
+
+        Instant now = clock.instant();
+
+        requireValidSession(user, now);
+        requireActiveSession(user, now);
+
+        repository.recordActivity(
+                user.loginId(),
+                SessionTimeoutPolicy.inactivityDeadline(user.role(), now, user.expiresAt()));
+    }
+
+    private void requireActiveSession(AuthenticatedUser user, Instant now) {
+        if (!repository.hasValidSession(user.loginId(), runtimeId, now)) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED, "The deposit session has expired.");
+        }
+    }
+
+    @Transactional
     public boolean prepareForCollection() {
         repository.lockMachine();
 
@@ -182,6 +248,7 @@ public class DepositService {
 
         repository.closeUnavailableDeposits(runtimeId, now);
         repository.closeDepositsOfUnavailableAccounts(now);
+        reporting.captureFinishedDeposits();
 
         return !repository.hasActiveDeposit();
     }

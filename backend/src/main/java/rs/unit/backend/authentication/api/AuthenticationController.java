@@ -11,6 +11,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.SecurityContextRepository;
@@ -20,10 +21,12 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import rs.unit.backend.authentication.application.AuthenticatedUser;
 import rs.unit.backend.authentication.application.AuthenticationService;
+import rs.unit.backend.authentication.application.SessionActivityService;
 import rs.unit.backend.user.domain.UserRole;
 
 @RestController
@@ -33,14 +36,17 @@ public class AuthenticationController {
     private final AuthenticationService authenticationService;
     private final SecurityContextRepository contextRepository;
     private final CsrfTokenRepository csrfRepository;
+    private final SessionActivityService activityService;
 
     public AuthenticationController(
             AuthenticationService authenticationService,
             SecurityContextRepository contextRepository,
-            CsrfTokenRepository csrfRepository) {
+            CsrfTokenRepository csrfRepository,
+            SessionActivityService activityService) {
         this.authenticationService = authenticationService;
         this.contextRepository = contextRepository;
         this.csrfRepository = csrfRepository;
+        this.activityService = activityService;
     }
 
     @GetMapping("/csrf")
@@ -82,6 +88,13 @@ public class AuthenticationController {
         return (AuthenticatedUser) authentication.getPrincipal();
     }
 
+    @PostMapping("/activity")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void activity(
+            @AuthenticationPrincipal AuthenticatedUser user, HttpServletRequest request) {
+        activityService.recordActivity(user, request.getSession(false));
+    }
+
     private void rejectExistingLogin() {
         Authentication current = SecurityContextHolder.getContext().getAuthentication();
 
@@ -101,6 +114,8 @@ public class AuthenticationController {
         } else {
             request.getSession(true);
         }
+
+        activityService.initialize(user, request.getSession(false));
 
         var authentication =
                 UsernamePasswordAuthenticationToken.authenticated(

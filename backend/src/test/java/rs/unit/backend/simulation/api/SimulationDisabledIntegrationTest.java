@@ -15,7 +15,11 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 
-@SpringBootTest(properties = "unit.collection.monitor.enabled=false")
+@SpringBootTest(
+        properties = {
+            "unit.collection.monitor.enabled=false",
+            "unit.deposit.monitor.enabled=false"
+        })
 @ActiveProfiles("test")
 class SimulationDisabledIntegrationTest {
 

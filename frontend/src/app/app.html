@@ -24,7 +24,25 @@
       @if (auth.notice()) {
         <p class="auth-notice" role="status">{{ auth.notice() }}</p>
       }
-      <router-outlet />
+      @if (session.timedOut() && auth.user()) {
+        <section class="message" aria-live="polite">
+          <p>Signing out due to inactivity.</p>
+
+          @if (session.error()) {
+            <p role="alert">{{ session.error() }}</p>
+
+            <button
+              class="machine-button"
+              [disabled]="session.ending()"
+              (click)="session.logout(true)"
+            >
+              RETRY SIGN OUT
+            </button>
+          }
+        </section>
+      } @else {
+        <router-outlet />
+      }
     </main>
 
     <footer class="machine-footer">

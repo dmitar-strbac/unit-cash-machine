@@ -1,16 +1,14 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
-import { finalize } from 'rxjs';
-import { authErrorMessage } from '../../core/auth/auth-error';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/auth/auth.service';
+import { SessionCoordinator } from '../../core/auth/session-coordinator.service';
 import { DepositService } from '../../core/deposit/deposit.service';
 import { DepositPanel } from '../deposit/deposit-panel';
 
 @Component({
   selector: 'app-session-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DepositPanel],
+  imports: [DepositPanel, RouterLink],
   template: `
     <section class="session-page" aria-label="Current session">
       @if (auth.user(); as user) {
@@ -20,7 +18,7 @@ import { DepositPanel } from '../deposit/deposit-panel';
           }
           @case ('MANAGEMENT') {
             <div class="session-menu">
-              <button class="machine-button menu-button" disabled>INVENTORY</button>
+              <a class="machine-button menu-button" routerLink="/inventory">INVENTORY</a>
               <button class="machine-button menu-button" disabled>SYSTEM</button>
             </div>
           }
@@ -108,39 +106,13 @@ import { DepositPanel } from '../deposit/deposit-panel';
 })
 export class SessionPage {
   protected readonly auth = inject(AuthService);
-  private readonly router = inject(Router);
-  private readonly destroyRef = inject(DestroyRef);
   protected readonly deposits = inject(DepositService);
+  private readonly session = inject(SessionCoordinator);
 
-  protected readonly busy = signal(false);
-  protected readonly error = signal('');
+  protected readonly busy = this.session.ending;
+  protected readonly error = this.session.error;
 
   protected logout(): void {
-    if (
-      this.busy() ||
-      (this.auth.user()?.role === 'CASHIER' &&
-        (this.deposits.busy() || this.deposits.pending() !== null))
-    ) {
-      return;
-    }
-
-    this.busy.set(true);
-    this.error.set('');
-
-    this.auth
-      .logout()
-      .pipe(
-        finalize(() => this.busy.set(false)),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe({
-        next: () => {
-          this.deposits.clear();
-          void this.router.navigateByUrl('/', { replaceUrl: true });
-        },
-        error: (error: unknown) => {
-          this.error.set(authErrorMessage(error));
-        },
-      });
+    this.session.logout();
   }
 }

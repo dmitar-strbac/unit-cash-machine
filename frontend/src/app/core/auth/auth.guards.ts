@@ -36,3 +36,15 @@ export const citGuard: CanActivateFn = () => {
     catchError(() => of(router.parseUrl('/login/cit'))),
   );
 };
+
+export const managementGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+
+  return auth.refresh().pipe(
+    map((user) =>
+      user?.role === 'MANAGEMENT' ? true : router.parseUrl(user ? '/session' : '/login/management'),
+    ),
+    catchError(() => of(router.parseUrl('/login/management'))),
+  );
+};
