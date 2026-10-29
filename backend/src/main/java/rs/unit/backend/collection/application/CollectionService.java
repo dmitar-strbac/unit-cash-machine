@@ -21,6 +21,7 @@ import rs.unit.backend.hardware.model.HardwareSnapshot.ExtensionBoardState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.LockState;
 import rs.unit.backend.hardware.model.PhysicalAction;
 import rs.unit.backend.hardware.port.HardwareControlPort;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 import rs.unit.backend.user.domain.UserRole;
 import rs.unit.backend.user.infrastructure.persistence.UserAccountRepository;
 
@@ -34,6 +35,7 @@ public class CollectionService {
     private final Clock clock;
     private final Duration securingTimeout;
     private final UUID runtimeId = UUID.randomUUID();
+    private final MachineRuntimeGuard runtime;
 
     public CollectionService(
             CollectionRepository repository,
@@ -41,7 +43,8 @@ public class CollectionService {
             HardwareControlPort hardware,
             UserAccountRepository users,
             Clock clock,
-            @Value("${unit.collection.securing-timeout-ms:5000}") long securingTimeoutMillis) {
+            @Value("${unit.collection.securing-timeout-ms:5000}") long securingTimeoutMillis,
+            MachineRuntimeGuard runtime) {
         if (securingTimeoutMillis <= 0) {
             throw new IllegalArgumentException("The securing timeout must be positive.");
         }
@@ -52,6 +55,7 @@ public class CollectionService {
         this.users = users;
         this.clock = clock;
         this.securingTimeout = Duration.ofMillis(securingTimeoutMillis);
+        this.runtime = runtime;
     }
 
     @Transactional
@@ -59,6 +63,8 @@ public class CollectionService {
         requireCit(user);
 
         repository.lockMachine();
+
+        runtime.requireOperational(user);
 
         if (!deposits.prepareForCollection()) {
             throw conflict("Finish the active deposit before starting cash collection.");
@@ -214,6 +220,10 @@ public class CollectionService {
     @Transactional
     public void synchronize() {
         repository.lockMachine();
+
+        if (!runtime.isRunning()) {
+            return;
+        }
 
         StoredCollection collection = repository.findUnfinished().orElse(null);
 
@@ -399,6 +409,8 @@ public class CollectionService {
         if (!clock.instant().isBefore(user.expiresAt())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "The session has expired.");
         }
+
+        runtime.requireOperational(user);
     }
 
     private static void requireOperationalLock(HardwareSnapshot snapshot) {

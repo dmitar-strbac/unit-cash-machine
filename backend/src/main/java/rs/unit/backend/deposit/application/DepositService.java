@@ -15,6 +15,7 @@ import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository.Stor
 import rs.unit.backend.deposit.infrastructure.persistence.DepositRepository.StoredOperation;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
 import rs.unit.backend.machine.domain.MachineReadinessPolicy;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 import rs.unit.backend.report.application.ReportingService;
 import rs.unit.backend.user.domain.UserRole;
 
@@ -26,16 +27,19 @@ public class DepositService {
     private final Clock clock;
     private final UUID runtimeId = UUID.randomUUID();
     private final ReportingService reporting;
+    private final MachineRuntimeGuard runtime;
 
     public DepositService(
             DepositRepository repository,
             HardwareStatusPort hardware,
             Clock clock,
-            ReportingService reporting) {
+            ReportingService reporting,
+            MachineRuntimeGuard runtime) {
         this.repository = repository;
         this.hardware = hardware;
         this.clock = clock;
         this.reporting = reporting;
+        this.runtime = runtime;
     }
 
     @Transactional
@@ -43,6 +47,8 @@ public class DepositService {
         requireCashier(user);
 
         repository.lockMachine();
+
+        runtime.requireOperational(user);
 
         Instant now = clock.instant();
         requireValidSession(user, now);
@@ -73,6 +79,7 @@ public class DepositService {
 
         Instant now = clock.instant();
         requireValidSession(user, now);
+        runtime.requireOperational(user);
         requireActiveSession(user, now);
 
         return view(findOwnedDeposit(user), now);
@@ -85,6 +92,8 @@ public class DepositService {
         validateBanknote(operationId, currency, denomination);
 
         repository.lockMachine();
+
+        runtime.requireOperational(user);
 
         Instant now = clock.instant();
         requireValidSession(user, now);
@@ -222,6 +231,8 @@ public class DepositService {
     public void recordActivity(AuthenticatedUser user) {
         requireCashier(user);
         repository.lockMachine();
+
+        runtime.requireOperational(user);
 
         Instant now = clock.instant();
 

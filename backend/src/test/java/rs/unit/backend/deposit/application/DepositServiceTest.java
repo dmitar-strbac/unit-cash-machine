@@ -41,6 +41,7 @@ import rs.unit.backend.hardware.model.HardwareSnapshot.ExtensionBoardState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.LockState;
 import rs.unit.backend.hardware.model.HardwareSnapshot.PrinterState;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
 import rs.unit.backend.report.application.ReportingService;
 import rs.unit.backend.user.domain.UserRole;
 
@@ -52,6 +53,8 @@ class DepositServiceTest {
     @Mock private HardwareStatusPort hardware;
 
     @Mock private ReportingService reporting;
+
+    @Mock private MachineRuntimeGuard runtime;
 
     private final Instant now = Instant.parse("2026-01-01T12:00:00Z");
     private final UUID userId = UUID.randomUUID();
@@ -70,7 +73,7 @@ class DepositServiceTest {
 
         service =
                 new DepositService(
-                        repository, hardware, Clock.fixed(now, ZoneOffset.UTC), reporting);
+                        repository, hardware, Clock.fixed(now, ZoneOffset.UTC), reporting, runtime);
 
         service.start(cashier);
 

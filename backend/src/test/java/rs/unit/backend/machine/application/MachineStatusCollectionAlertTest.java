@@ -23,6 +23,9 @@ import rs.unit.backend.hardware.model.HardwareSnapshot.PrinterState;
 import rs.unit.backend.hardware.port.HardwareStatusPort;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfiguration;
 import rs.unit.backend.machine.infrastructure.persistence.MachineConfigurationRepository;
+import rs.unit.backend.maintenance.application.MachineRuntimeGuard;
+import rs.unit.backend.maintenance.application.MachineRuntimeView;
+import rs.unit.backend.maintenance.domain.MachineRunState;
 
 class MachineStatusCollectionAlertTest {
 
@@ -80,6 +83,13 @@ class MachineStatusCollectionAlertTest {
         HardwareStatusPort hardware = mock(HardwareStatusPort.class);
         CollectionRepository collections = mock(CollectionRepository.class);
 
+        MachineRuntimeGuard runtime = mock(MachineRuntimeGuard.class);
+
+        when(runtime.isRunning()).thenReturn(true);
+        when(runtime.view())
+                .thenReturn(
+                        new MachineRuntimeView(MachineRunState.RUNNING, 0, null, null, null, null));
+
         when(configurations.findById((short) 1))
                 .thenReturn(Optional.of(mock(MachineConfiguration.class)));
         when(collections.findUnfinished()).thenReturn(Optional.of(collection));
@@ -93,7 +103,7 @@ class MachineStatusCollectionAlertTest {
                                 ExtensionBoardState.ONLINE,
                                 PrinterState.READY));
 
-        return new MachineStatusService(configurations, hardware, collections);
+        return new MachineStatusService(configurations, hardware, collections, runtime);
     }
 
     private StoredCollection collection(CollectionStep step, String errorCode) {

@@ -178,6 +178,10 @@ class MachineDiagnosticsPolicyTest {
                             initial.lock(),
                             initial.extensionBoard(),
                             PrinterState.valueOf(value));
+
+            case SYSTEM ->
+                    throw new IllegalArgumentException(
+                            "SYSTEM is not a physical hardware component");
         };
     }
 }
